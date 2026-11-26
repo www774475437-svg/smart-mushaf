@@ -99,6 +99,7 @@ class AudioCtl extends ChangeNotifier {
 
   /// Plays ayahs [fromG..toG] with the current reciter.
   Future<void> playRange(int fromG, int toG, {bool continueAfter = false, bool forceAyah = false}) async {
+    customTitle = null;
     var r = Reciters.I.current;
     if (!forceAyah && r.perAyah && AppSettings.I.repeatAyah <= 1) {
       // Prefer the continuous recording of the same reciter so the recitation sounds natural.
@@ -348,6 +349,33 @@ class AudioCtl extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Plays any single recording (e.g. a recorded tafsir lesson).
+  String? customTitle, customSub;
+  Future<void> playUrl(String url, String title, String sub) async {
+    error = null;
+    _timing = null;
+    _queue = [];
+    _continue = false;
+    currentG = null;
+    surahPlaying = null;
+    customTitle = title;
+    customSub = sub;
+    active = true;
+    notifyListeners();
+    try {
+      await player.stop();
+      await player.setLoopMode(LoopMode.off);
+      await player.setSpeed(AppSettings.I.speed);
+      await player.setAudioSource(AudioSource.uri(Uri.parse(url.replaceFirst('http://', 'https://'))));
+      player.play();
+    } catch (e) {
+      error = 'تعذّر تشغيل التسجيل، تأكد من الاتصال بالإنترنت';
+      active = false;
+      customTitle = null;
+      notifyListeners();
+    }
+  }
+
   Future<void> toggle() async {
     if (player.playing) {
       await player.pause();
@@ -358,6 +386,7 @@ class AudioCtl extends ChangeNotifier {
   }
 
   Future<void> stop() async {
+    customTitle = null;
     _continue = false;
     _timing = null;
     await player.stop();

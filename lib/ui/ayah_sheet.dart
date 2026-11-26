@@ -12,6 +12,7 @@ import '../services/store.dart';
 import '../services/tts.dart';
 import 'common.dart';
 import 'memorize.dart';
+import 'reciter_sheet.dart';
 import 'reciters_screen.dart';
 import 'share_image.dart';
 
@@ -483,7 +484,7 @@ class _AyahSheetState extends State<AyahSheet> {
                 ),
                 const SizedBox(height: 10),
                 _Tile(
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RecitersScreen(pick: true))),
+                  onTap: () => showReciterSheet(context, page: ay.page),
                   onLongPress: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AddReciterScreen())),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
                   child: Row(children: [

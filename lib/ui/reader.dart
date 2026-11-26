@@ -15,7 +15,8 @@ import 'ayah_sheet.dart';
 import '../data/layout.dart';
 import 'common.dart';
 import 'mushaf_lines.dart';
-import 'reciters_screen.dart';
+import 'reciter_sheet.dart';
+import 'search.dart';
 
 const _basmala = 'بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ';
 
@@ -253,8 +254,8 @@ class _MushafScreenState extends State<MushafScreen> {
   }
 
   Widget _topBar(PageColors col) {
-    final q = QuranData.I;
-    final s = q.surahOfPage(page);
+    const green = kEmerald;
+    final ic = st_night ? const Color(0xFF7BCBB0) : green;
     return Positioned(
       top: 0,
       left: 0,
@@ -263,71 +264,61 @@ class _MushafScreenState extends State<MushafScreen> {
         ignoring: !bars,
         child: AnimatedOpacity(
           opacity: bars ? 1 : 0,
-          duration: const Duration(milliseconds: 220),
+          duration: const Duration(milliseconds: 200),
           child: Container(
             decoration: BoxDecoration(
-              color: col.bar,
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 12)],
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+              color: col.soft,
+              border: Border(bottom: BorderSide(color: Colors.black.withValues(alpha: 0.08))),
             ),
             child: SafeArea(
               bottom: false,
               child: SizedBox(
-                height: 58,
+                height: 54,
                 child: ListenableBuilder(
-                  listenable: Listenable.merge([UserStore.I, AudioCtl.I]),
+                  listenable: UserStore.I,
                   builder: (context, _) {
                     final marked = UserStore.I.isPageBookmarked(page);
-                    final playing = AudioCtl.I.active && AudioCtl.I.playing;
                     return Row(
                       children: [
+                        const SizedBox(width: 6),
                         IconButton(
-                          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                          color: col.text,
+                          tooltip: 'الفهرس',
+                          icon: const Icon(Icons.format_list_bulleted_rounded),
+                          color: ic,
                           onPressed: () => Navigator.pop(context),
                         ),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('سورة ${surahName(s)}',
-                                  style: TextStyle(color: col.text, fontWeight: FontWeight.w700, fontSize: 16)),
-                              Text('الجزء ${ar(q.juzOfPage(page))} • الحزب ${ar(q.hizbOfPage(page))} • صفحة ${ar(page)}',
-                                  style: TextStyle(color: col.text.withValues(alpha: 0.65), fontSize: 12)),
-                            ],
-                          ),
+                        IconButton(
+                          tooltip: 'البحث',
+                          icon: const Icon(Icons.search_rounded),
+                          color: ic,
+                          onPressed: () =>
+                              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchScreen())),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          tooltip: 'تمرير تلقائي',
+                          icon: Icon(autoOn ? Icons.pause_circle_outline_rounded : Icons.swipe_vertical_rounded),
+                          color: autoOn ? col.accent : ic,
+                          onPressed: autoOn ? _stopAuto : _startAuto,
                         ),
                         IconButton(
                           tooltip: 'علامة الصفحة',
                           icon: Icon(marked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded),
-                          color: marked ? col.accent : col.text,
+                          color: marked ? col.accent : ic,
                           onPressed: () {
                             UserStore.I.togglePageBookmark(page);
                             toast(context, marked ? 'أُزيلت العلامة' : 'حُفظت علامة على الصفحة ${ar(page)}');
                           },
                         ),
                         IconButton(
-                          tooltip: 'تشغيل',
-                          icon: Icon(playing ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
-                              size: 30),
-                          color: col.accent,
-                          onPressed: _playPage,
-                        ),
-                        IconButton(
-                          tooltip: 'تمرير تلقائي',
-                          icon: Icon(autoOn ? Icons.motion_photos_pause_rounded : Icons.slow_motion_video_rounded),
-                          color: autoOn ? col.accent : col.text,
-                          onPressed: autoOn ? _stopAuto : _startAuto,
-                        ),
-                        IconButton(
                           tooltip: 'خيارات القراءة',
-                          icon: const Icon(Icons.tune_rounded),
-                          color: col.text,
+                          icon: const Icon(Icons.settings_outlined),
+                          color: ic,
                           onPressed: () => showReadingOptions(context, onAutoChanged: () {
                             if (autoOn) _schedule();
                           }),
                         ),
+                        const SizedBox(width: 6),
                       ],
                     );
                   },
@@ -340,48 +331,65 @@ class _MushafScreenState extends State<MushafScreen> {
     );
   }
 
+  bool get st_night => AppSettings.I.theme == ReadTheme.night;
+
   Widget _bottomArea(PageColors col) {
-    return SafeArea(
-      top: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (autoOn && bars) _autoPill(col),
-          if (bars) const AudioBar(),
-          IgnorePointer(
-            ignoring: !bars,
-            child: AnimatedOpacity(
-              opacity: bars ? 1 : 0,
-              duration: const Duration(milliseconds: 220),
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  color: col.bar,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10)],
-                ),
-                child: Row(
-                  children: [
-                    Text(ar(page), style: TextStyle(color: col.text, fontWeight: FontWeight.w700)),
-                    Expanded(
-                      child: Slider(
-                        min: 1,
-                        max: 604,
-                        value: page.toDouble(),
-                        activeColor: col.accent,
-                        inactiveColor: col.accent.withValues(alpha: 0.2),
-                        onChanged: (v) => setState(() => page = v.round()),
-                        onChangeEnd: (v) => _goTo(v.round(), animate: false),
+    final ic = st_night ? const Color(0xFF7BCBB0) : kEmerald;
+    return IgnorePointer(
+      ignoring: !bars,
+      child: AnimatedOpacity(
+        opacity: bars ? 1 : 0,
+        duration: const Duration(milliseconds: 200),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (autoOn) _autoPill(col),
+            AudioBar(page: page, onPlay: _playPage),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: col.soft,
+                border: Border(top: BorderSide(color: Colors.black.withValues(alpha: 0.08))),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 2, 14, 2),
+                  child: Row(
+                    children: [
+                      Text('${604}', style: TextStyle(color: ic, fontSize: 12, fontWeight: FontWeight.w700)),
+                      Expanded(
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            trackHeight: 10,
+                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
+                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                          ),
+                          child: Slider(
+                            min: 1,
+                            max: 604,
+                            value: page.toDouble(),
+                            activeColor: ic,
+                            inactiveColor: Colors.grey.withValues(alpha: 0.25),
+                            onChanged: (v) => setState(() => page = v.round()),
+                            onChangeEnd: (v) => _goTo(v.round(), animate: false),
+                          ),
+                        ),
                       ),
-                    ),
-                    Text(ar(604), style: TextStyle(color: col.text.withValues(alpha: 0.6))),
-                  ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                        decoration: BoxDecoration(color: ic, borderRadius: BorderRadius.circular(12)),
+                        child: Text('$page',
+                            style: TextStyle(
+                                color: st_night ? Colors.black : Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -636,22 +644,27 @@ class _SurahBanner extends StatelessWidget {
   }
 }
 
-/// The small audio player shown while a recitation plays.
+/// The small pill player: reciter name and play button (like a quiet mushaf).
 class AudioBar extends StatelessWidget {
-  const AudioBar({super.key});
+  final int? page;
+  final VoidCallback? onPlay;
+  const AudioBar({super.key, this.page, this.onPlay});
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: AudioCtl.I,
+      listenable: Listenable.merge([AudioCtl.I, Reciters.I, AppSettings.I]),
       builder: (context, _) {
         final a = AudioCtl.I;
+        final dark = AppSettings.I.theme == ReadTheme.night;
+        final green = dark ? const Color(0xFF7BCBB0) : kEmerald;
+        final bg = dark ? const Color(0xFF1B2623) : const Color(0xFFF4F0E8);
         if (a.error != null && !a.active) {
           return Container(
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+            margin: const EdgeInsets.fromLTRB(40, 0, 40, 0),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(color: Colors.red.shade700, borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(color: Colors.red.shade700, borderRadius: BorderRadius.circular(22)),
             child: Row(children: [
-              Expanded(child: Text(a.error!, style: const TextStyle(color: Colors.white))),
+              Expanded(child: Text(a.error!, style: const TextStyle(color: Colors.white, fontSize: 13))),
               GestureDetector(
                 onTap: () {
                   a.error = null;
@@ -662,83 +675,86 @@ class AudioBar extends StatelessWidget {
             ]),
           );
         }
-        if (!a.active) return const SizedBox.shrink();
+        if (!a.active && onPlay == null) return const SizedBox.shrink();
         final q = QuranData.I;
         final r = a.playingReciter ?? Reciters.I.current;
-        String where;
-        if (a.surahPlaying != null) {
-          where = 'سورة ${surahName(a.surahPlaying!)}';
-        } else if (a.currentG != null) {
-          final ay = q.ayahs[a.currentG!];
-          where = 'سورة ${surahName(ay.s)} • الآية ${ar(ay.a)}';
-        } else {
-          where = '';
+        String title = a.active ? (a.customTitle ?? r.name) : Reciters.I.current.name;
+        String? where;
+        if (a.active) {
+          if (a.customTitle != null) {
+            where = a.customSub;
+          } else if (a.surahPlaying != null) {
+            where = 'سورة ${surahName(a.surahPlaying!)}';
+          } else if (a.currentG != null) {
+            final ay = q.ayahs[a.currentG!];
+            where = '${surahName(ay.s)}: ${ay.a}';
+          }
         }
         return Container(
-          margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-          padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
+          margin: const EdgeInsets.symmetric(horizontal: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [kEmeraldDark, kEmerald]),
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 14)],
+            color: bg,
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.10)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.10), blurRadius: 10)],
           ),
           child: Row(
             children: [
-              IconButton(
-                icon: const Icon(Icons.skip_next_rounded, color: Colors.white),
-                tooltip: 'السابق',
-                onPressed: a.previous,
-              ),
-              IconButton(
-                icon: Icon(a.playing ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
-                    color: kGold, size: 38),
-                onPressed: a.toggle,
-              ),
-              IconButton(
-                icon: const Icon(Icons.skip_previous_rounded, color: Colors.white),
-                tooltip: 'التالي',
-                onPressed: a.next,
-              ),
-              const SizedBox(width: 4),
               Expanded(
-                child: GestureDetector(
-                  onTap: () => Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (_) => const RecitersScreen(pick: true))),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(r.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                      Text(where,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                    ],
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(24),
+                  onTap: () => showReciterSheet(context, page: page),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: green, fontWeight: FontWeight.w600, fontSize: 16)),
+                              if (where != null)
+                                Text(where, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: kGoldDeep)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        CircleAvatar(
+                          radius: 10,
+                          backgroundColor: Colors.grey.withValues(alpha: 0.22),
+                          child: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: green),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              GestureDetector(
-                onTap: () {
-                  const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
-                  final i = speeds.indexOf(AppSettings.I.speed);
-                  a.setSpeed(speeds[(i + 1) % speeds.length]);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.white38),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text('${AppSettings.I.speed}×',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+              if (a.active) ...[
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'السرعة',
+                  onPressed: () {
+                    const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
+                    final i = speeds.indexOf(AppSettings.I.speed);
+                    a.setSpeed(speeds[(i + 1) % speeds.length]);
+                  },
+                  icon: Text('${AppSettings.I.speed}×', style: TextStyle(color: green, fontWeight: FontWeight.w700, fontSize: 12)),
                 ),
-              ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'إيقاف',
+                  icon: Icon(Icons.stop_rounded, color: green),
+                  onPressed: a.stop,
+                ),
+              ],
               IconButton(
-                icon: const Icon(Icons.stop_circle_outlined, color: Colors.white70),
-                onPressed: a.stop,
+                icon: Icon(a.active && a.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: green, size: 32),
+                onPressed: a.active ? a.toggle : onPlay,
               ),
             ],
           ),
