@@ -70,10 +70,6 @@ ThemeData buildTheme(bool dark) {
       titleTextStyle: TextStyle(
           fontFamily: 'Tajawal', fontSize: 19, fontWeight: FontWeight.w700, color: dark ? Colors.white : kEmeraldDark),
     ),
-    pageTransitionsTheme: const PageTransitionsTheme(builders: {
-      TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-    }),
   );
 }
 
