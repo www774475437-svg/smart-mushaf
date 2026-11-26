@@ -10,7 +10,10 @@ class LWord {
   final int g;
   final String t;
   final bool end;
-  const LWord(this.g, this.t, this.end);
+
+  /// Glyph code in the page font (empty when page fonts are not bundled).
+  final String c;
+  const LWord(this.g, this.t, this.end, this.c);
 }
 
 /// One of the 15 lines of a mushaf page.
@@ -30,6 +33,28 @@ class MushafLayout {
   MushafLayout._();
   static final MushafLayout I = MushafLayout._();
   bool ready = false;
+  bool qcf = false;
+  final Set<int> _fontLoaded = {};
+  final Map<int, Future<bool>> _fontLoading = {};
+
+  bool fontReady(int page) => _fontLoaded.contains(page);
+
+  /// Loads the printed-mushaf font of one page (each page has its own font).
+  Future<bool> ensureFont(int page) {
+    if (!qcf || page < 1 || page > 604) return Future.value(false);
+    if (_fontLoaded.contains(page)) return Future.value(true);
+    return _fontLoading.putIfAbsent(page, () async {
+      try {
+        final loader = FontLoader('QCF$page')..addFont(rootBundle.load('assets/qcf/p$page.ttf'));
+        await loader.load();
+        _fontLoaded.add(page);
+        return true;
+      } catch (_) {
+        _fontLoading.remove(page);
+        return false;
+      }
+    });
+  }
   String basmala = '';
   final List<List<LLine>> pages = [];
 
@@ -60,7 +85,7 @@ class MushafLayout {
               final g = (wl[0] as num).toInt();
               final t = wl[1] as String;
               final e = (wl[2] as num) == 1;
-              ws.add(LWord(g, t, e));
+              ws.add(LWord(g, t, e, wl.length > 3 ? (wl[3] as String? ?? '') : ''));
               if (!e) {
                 final b = texts[g] ??= StringBuffer();
                 if (b.isNotEmpty) b.write(' ');
@@ -79,6 +104,11 @@ class MushafLayout {
           if (g >= 0 && g < q.ayahs.length) q.ayahs[g].text = b.toString();
         });
         ready = true;
+        try {
+          qcf = jsonDecode(await rootBundle.loadString('assets/data/qcf.json')) == true;
+        } catch (_) {
+          qcf = false;
+        }
       }
     } catch (_) {
       ready = false;

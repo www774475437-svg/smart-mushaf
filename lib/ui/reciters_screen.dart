@@ -68,7 +68,7 @@ class _RecitersScreenState extends State<RecitersScreen> {
             ),
           ],
           bottom: const TabBar(tabs: [
-            Tab(text: 'آية بآية'),
+            Tab(text: 'مع تظليل الآية'),
             Tab(text: 'جميع القرّاء'),
             Tab(text: 'قرّائي'),
           ]),
@@ -102,6 +102,20 @@ class _RecitersScreenState extends State<RecitersScreen> {
                             child: Text('هؤلاء القرّاء تُظلَّل معهم الآية أثناء التلاوة، ويمكن تكرار الآية والمقطع.',
                                 style: TextStyle(fontSize: 12.5)),
                           ),
+                          if (rs.timed.isNotEmpty) ...[
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(20, 10, 20, 2),
+                              child: Text('تلاوة متصلة بلا توقف (مع تظليل الآية)',
+                                  style: TextStyle(fontWeight: FontWeight.w700, color: kGoldDeep)),
+                            ),
+                            ...rs.timed.where(_match).map(_tile),
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(20, 14, 20, 2),
+                              child: Text('آية بآية (تصلح لتكرار الآية للحفظ)',
+                                  style: TextStyle(fontWeight: FontWeight.w700, color: kGoldDeep)),
+                            ),
+                          ] else if (rs.loadingTimed)
+                            const Padding(padding: EdgeInsets.all(12), child: LinearProgressIndicator()),
                           ...rs.perAyah.where(_match).map(_tile),
                         ],
                       ),

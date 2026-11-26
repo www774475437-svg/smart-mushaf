@@ -11,32 +11,74 @@ import '../services/store.dart';
 import 'common.dart';
 
 /// A mushaf page drawn line by line exactly as in the Madinah mushaf (15 lines).
-class MushafLinesPage extends StatelessWidget {
+class MushafLinesPage extends StatefulWidget {
   final int page;
   final int? selectedG;
   final void Function(int g) onLongPress;
-  const MushafLinesPage({super.key, required this.page, this.selectedG, required this.onLongPress});
 
-  static final Map<int, List<double>> _widths = {};
-  static const _font = 'UthmanicHafs';
+  /// Words marked by a teacher ("line:index"), drawn in red.
+  final Set<String>? marks;
+  final void Function(String key, LWord word)? onWordTap;
+  final bool showInfo;
+  const MushafLinesPage(
+      {super.key,
+      required this.page,
+      this.selectedG,
+      required this.onLongPress,
+      this.marks,
+      this.onWordTap,
+      this.showInfo = true});
+  @override
+  State<MushafLinesPage> createState() => _MushafLinesPageState();
+}
+
+class _MushafLinesPageState extends State<MushafLinesPage> {
+  static final Map<String, List<double>> _widths = {};
+  static const _hafs = 'UthmanicHafs';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFont();
+  }
+
+  @override
+  void didUpdateWidget(covariant MushafLinesPage old) {
+    super.didUpdateWidget(old);
+    if (old.page != widget.page) _loadFont();
+  }
+
+  void _loadFont() {
+    final l = MushafLayout.I;
+    if (l.qcf && !l.fontReady(widget.page)) {
+      l.ensureFont(widget.page).then((ok) {
+        if (ok && mounted) setState(() {});
+      });
+    }
+    l.ensureFont(widget.page + 1);
+    l.ensureFont(widget.page - 1);
+  }
 
   /// Natural width of each line at font size 100.
-  List<double> _measure(List<LLine> lines) {
-    return _widths.putIfAbsent(page, () {
+  List<double> _measure(List<LLine> lines, String font, bool glyphs) {
+    return _widths.putIfAbsent('$font:${widget.page}', () {
       final out = <double>[];
       for (final l in lines) {
         if (l.kind != 'w') {
           out.add(0);
           continue;
         }
-        final tp = TextPainter(
-          text: TextSpan(
-              text: l.words.map((w) => w.t).join(' '), style: const TextStyle(fontFamily: _font, fontSize: 100)),
-          textDirection: TextDirection.rtl,
-          maxLines: 1,
-        )..layout();
-        out.add(tp.width);
-        tp.dispose();
+        var sum = 0.0;
+        for (final wd in l.words) {
+          final tp = TextPainter(
+            text: TextSpan(text: glyphs ? wd.c : wd.t, style: TextStyle(fontFamily: font, fontSize: 100)),
+            textDirection: TextDirection.rtl,
+            maxLines: 1,
+          )..layout();
+          sum += tp.width;
+          tp.dispose();
+        }
+        out.add(sum);
       }
       return out;
     });
@@ -44,20 +86,108 @@ class MushafLinesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final page = widget.page;
     final q = QuranData.I;
     final st = AppSettings.I;
     final col = pageColors(st.theme);
-    final lines = MushafLayout.I.pages[page - 1];
+    final lay = MushafLayout.I;
+    final lines = lay.pages[page - 1];
+    final glyphs = lay.qcf && lay.fontReady(page);
+    final font = glyphs ? 'QCF$page' : _hafs;
     final first = q.pageAyahs[page].isEmpty ? q.ayahs[0] : q.ayahs[q.pageAyahs[page].first];
     final audioG = AudioCtl.I.active ? AudioCtl.I.currentG : null;
     final hl = UserStore.I.highlights;
     final small = TextStyle(color: col.accent, fontSize: 15, fontWeight: FontWeight.w500);
 
+    final body = LayoutBuilder(builder: (context, c) {
+      final w = c.maxWidth;
+      final h = c.maxHeight;
+      final ws = _measure(lines, font, glyphs);
+      final maxW = ws.fold<double>(1, math.max);
+      final full = lines.length >= 15;
+      final lineH = full ? h / 15 : math.min(h / 11, 64.0);
+      var fs = w * 100 / maxW * 0.995;
+      fs = math.min(fs, lineH / (glyphs ? 1.45 : 1.72));
+      if (!full) fs = math.min(fs, w / (glyphs ? 13 : 15));
+      final rows = <Widget>[];
+      for (var i = 0; i < lines.length; i++) {
+        final l = lines[i];
+        Widget child;
+        if (l.kind == 's') {
+          child = SurahFrame(s: l.surah, col: col, height: lineH * 0.92);
+        } else if (l.kind == 'b') {
+          child = Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(lay.basmala,
+                  textDirection: TextDirection.rtl,
+                  style: TextStyle(fontFamily: _hafs, fontSize: lineH * 0.5, color: col.text, height: 1.5)),
+            ),
+          );
+        } else if (l.kind == 'w') {
+          final natural = ws[i] * fs / 100;
+          final centered = !full || natural < w * 0.72;
+          final n = l.words.length;
+          final gap = centered ? fs * (glyphs ? 0.04 : 0.11) : math.max(0.0, (w - natural) / (2 * n));
+          final kids = <Widget>[];
+          for (var k = 0; k < n; k++) {
+            final wd = l.words[k];
+            final key = '$i:$k';
+            Color? bg;
+            var color = col.text;
+            if (widget.marks != null && widget.marks!.contains(key)) {
+              bg = Colors.red.withValues(alpha: 0.16);
+              color = Colors.red.shade700;
+            } else if (wd.g == audioG) {
+              bg = col.accent.withValues(alpha: 0.22);
+            } else if (wd.g == widget.selectedG) {
+              bg = kEmerald.withValues(alpha: 0.16);
+            } else if (hl[wd.g] != null) {
+              bg = kHighlightColors[hl[wd.g]!.clamp(0, kHighlightColors.length - 1)].withValues(alpha: 0.4);
+            }
+            if (wd.end && !glyphs && color == col.text) color = col.accent;
+            kids.add(GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onWordTap == null ? null : () => widget.onWordTap!(key, wd),
+              onLongPress: () => widget.onLongPress(wd.g),
+              child: Container(
+                color: bg,
+                height: lineH,
+                alignment: Alignment.center,
+                padding: EdgeInsets.symmetric(horizontal: gap),
+                child: Text(glyphs ? wd.c : wd.t,
+                    textDirection: TextDirection.rtl,
+                    softWrap: false,
+                    overflow: TextOverflow.visible,
+                    style: TextStyle(fontFamily: font, fontSize: fs, color: color, height: glyphs ? 1.3 : 1.6)),
+              ),
+            ));
+          }
+          child = FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              textDirection: TextDirection.rtl,
+              mainAxisSize: MainAxisSize.min,
+              children: kids,
+            ),
+          );
+        } else {
+          child = const SizedBox.shrink();
+        }
+        rows.add(full
+            ? Expanded(child: Center(child: child))
+            : SizedBox(height: lineH * 1.15, child: Center(child: child)));
+      }
+      return Column(mainAxisAlignment: MainAxisAlignment.center, children: rows);
+    });
+
+    if (!widget.showInfo) return Container(color: col.bg, padding: const EdgeInsets.all(6), child: body);
+
     return Container(
       color: col.bg,
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
           child: Column(
             children: [
               SizedBox(
@@ -70,86 +200,7 @@ class MushafLinesPage extends StatelessWidget {
                   ],
                 ),
               ),
-              Expanded(
-                child: LayoutBuilder(builder: (context, c) {
-                  final w = c.maxWidth;
-                  final h = c.maxHeight;
-                  final ws = _measure(lines);
-                  final maxW = ws.fold<double>(1, math.max);
-                  final full = lines.length >= 15;
-                  final lineH = full ? h / 15 : math.min(h / 11, 64.0);
-                  var fs = w * 100 / maxW * 0.99;
-                  fs = math.min(fs, lineH / 1.72);
-                  if (!full) fs = math.min(fs, w / 15);
-                  final rows = <Widget>[];
-                  for (var i = 0; i < lines.length; i++) {
-                    final l = lines[i];
-                    Widget child;
-                    if (l.kind == 's') {
-                      child = SurahFrame(s: l.surah, col: col, height: lineH * 0.92);
-                    } else if (l.kind == 'b') {
-                      child = Center(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(MushafLayout.I.basmala,
-                              textDirection: TextDirection.rtl,
-                              style: TextStyle(fontFamily: _font, fontSize: fs * 1.02, color: col.text, height: 1.5)),
-                        ),
-                      );
-                    } else if (l.kind == 'w') {
-                      final natural = ws[i] * fs / 100;
-                      final centered = !full || natural < w * 0.72;
-                      final kids = <Widget>[];
-                      for (var k = 0; k < l.words.length; k++) {
-                        final wd = l.words[k];
-                        Color? bg;
-                        var color = col.text;
-                        if (wd.g == audioG) {
-                          bg = col.accent.withValues(alpha: 0.22);
-                        } else if (wd.g == selectedG) {
-                          bg = kEmerald.withValues(alpha: 0.16);
-                        } else if (hl[wd.g] != null) {
-                          bg = kHighlightColors[hl[wd.g]!.clamp(0, kHighlightColors.length - 1)].withValues(alpha: 0.4);
-                        }
-                        if (wd.end) color = col.accent;
-                        if (centered && k > 0) kids.add(SizedBox(width: fs * 0.22));
-                        kids.add(GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onLongPress: () => onLongPress(wd.g),
-                          child: Container(
-                            color: bg,
-                            child: Text(wd.t,
-                                textDirection: TextDirection.rtl,
-                                softWrap: false,
-                                style: TextStyle(fontFamily: _font, fontSize: fs, color: color, height: 1.6)),
-                          ),
-                        ));
-                      }
-                      child = FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: SizedBox(
-                          width: centered ? null : w,
-                          child: Row(
-                            textDirection: TextDirection.rtl,
-                            mainAxisSize: centered ? MainAxisSize.min : MainAxisSize.max,
-                            mainAxisAlignment: centered ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
-                            children: kids,
-                          ),
-                        ),
-                      );
-                    } else {
-                      child = const SizedBox.shrink();
-                    }
-                    rows.add(full
-                        ? Expanded(child: Center(child: child))
-                        : SizedBox(height: lineH * 1.15, child: Center(child: child)));
-                  }
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: rows,
-                  );
-                }),
-              ),
+              Expanded(child: body),
               SizedBox(
                 height: 34,
                 child: Row(

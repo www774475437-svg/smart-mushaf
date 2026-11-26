@@ -160,7 +160,7 @@ class HomeScreen extends StatelessWidget {
                           () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RecitersScreen()))),
                       _Feature(Icons.lightbulb_rounded, 'التفسير الذكي', kGoldDeep,
                           () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SmartTafsirScreen()))),
-                      _Feature(Icons.record_voice_over_rounded, 'الحفظ والتسميع', const Color(0xFF2E7D32), () => onTab(2)),
+                      _Feature(Icons.record_voice_over_rounded, 'الحفظ والتسميع', const Color(0xFF2E7D32), () => onTab(3)),
                       _Feature(Icons.event_available_rounded, 'الختمة', const Color(0xFF1565C0),
                           () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const KhatmaScreen()))),
                       _Feature(Icons.search_rounded, 'البحث', const Color(0xFF00838F),

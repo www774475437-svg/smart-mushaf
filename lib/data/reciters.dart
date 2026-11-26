@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 String pad3(int n) => n.toString().padLeft(3, '0');
 
-enum RecKind { ayah, surah }
+enum RecKind { ayah, surah, timed }
 
 class Reciter {
   final String id, name, sub;
@@ -16,7 +16,12 @@ class Reciter {
   final String base;
   final List<int>? surahs;
   final bool custom;
-  const Reciter(this.id, this.name, this.kind, this.base, {this.sub = '', this.surahs, this.custom = false});
+
+  /// MP3Quran read id (for whole-surah recitations that come with ayah timings).
+  final int? readId;
+  const Reciter(this.id, this.name, this.kind, this.base,
+      {this.sub = '', this.surahs, this.custom = false, this.readId});
+  bool get timed => kind == RecKind.timed;
 
   String ayahUrl(int s, int a) => '$base${pad3(s)}${pad3(a)}.mp3';
   String surahUrl(int s) => '$base${pad3(s)}.mp3';
@@ -31,16 +36,18 @@ class Reciter {
         'base': base,
         'surahs': surahs,
         'custom': custom,
+        'readId': readId,
       };
 
   static Reciter fromJson(Map<String, dynamic> m) => Reciter(
         m['id'] as String,
         m['name'] as String,
-        RecKind.values[(m['kind'] as int? ?? 0).clamp(0, 1)],
+        RecKind.values[(m['kind'] as int? ?? 0).clamp(0, 2)],
         m['base'] as String,
         sub: (m['sub'] as String?) ?? '',
         surahs: (m['surahs'] as List?)?.map((e) => (e as num).toInt()).toList(),
         custom: (m['custom'] as bool?) ?? false,
+        readId: (m['readId'] as num?)?.toInt(),
       );
 }
 
@@ -95,6 +102,10 @@ class Reciters extends ChangeNotifier {
   ];
   List<Reciter> all = [];
   List<Reciter> custom = [];
+
+  /// Whole-surah recitations with ayah timings: continuous sound + ayah highlight.
+  List<Reciter> timed = [];
+  bool loadingTimed = false;
   String _currentId = 'ea:Maher_AlMuaiqly_64kbps';
   bool loadingAll = false;
   String? allError;
@@ -109,6 +120,14 @@ class Reciters extends ChangeNotifier {
       }
     } catch (_) {}
     try {
+      final raw = _p.getString('timedReciters');
+      if (raw != null) {
+        timed = (jsonDecode(raw) as List).map((e) => Reciter.fromJson(e as Map<String, dynamic>)).toList();
+      }
+    } catch (_) {}
+    loadTimed();
+    try {
+      if (kIsWeb) throw UnsupportedError('web');
       final dir = await getApplicationDocumentsDirectory();
       final f = File('${dir.path}/mp3quran_reciters.json');
       if (await f.exists()) {
@@ -117,7 +136,7 @@ class Reciters extends ChangeNotifier {
     } catch (_) {}
   }
 
-  List<Reciter> get everything => [...perAyah, ...custom, ...all];
+  List<Reciter> get everything => [...timed, ...perAyah, ...custom, ...all];
 
   Reciter? byId(String id) {
     for (final r in everything) {
@@ -173,6 +192,42 @@ class Reciters extends ChangeNotifier {
     return out;
   }
 
+  Future<void> loadTimed({bool force = false}) async {
+    if (loadingTimed || (timed.isNotEmpty && !force)) return;
+    loadingTimed = true;
+    try {
+      final r = await http
+          .get(Uri.parse('https://mp3quran.net/api/v3/ayat_timing/reads'))
+          .timeout(const Duration(seconds: 30));
+      if (r.statusCode == 200) {
+        final j = jsonDecode(utf8.decode(r.bodyBytes));
+        final list = j is List ? j : ((j as Map)['reads'] ?? j['data'] ?? []) as List;
+        final out = <Reciter>[];
+        for (final e in list) {
+          final m = e as Map<String, dynamic>;
+          var base = ((m['folder_url'] ?? m['server'] ?? '') as String).trim();
+          final id = (m['id'] as num?)?.toInt();
+          if (base.isEmpty || id == null) continue;
+          if (!base.endsWith('/')) base = '$base/';
+          if (base.startsWith('http://')) base = base.replaceFirst('http://', 'https://');
+          out.add(Reciter('tm:$id', ((m['name'] ?? '') as String).trim(), RecKind.timed, base,
+              sub: 'تلاوة متصلة • ${((m['rewaya'] ?? '') as String).trim()}', readId: id));
+        }
+        if (out.isNotEmpty) {
+          timed = out;
+          _p.setString('timedReciters', jsonEncode(out.map((e) => e.toJson()).toList()));
+          // First run: prefer a continuous recitation.
+          if (_p.getString('reciter') == null) {
+            final pick = out.firstWhere((e) => e.name.contains('المعيقلي'), orElse: () => out.first);
+            _currentId = pick.id;
+          }
+        }
+      }
+    } catch (_) {}
+    loadingTimed = false;
+    notifyListeners();
+  }
+
   Future<void> loadAll({bool force = false}) async {
     if (loadingAll) return;
     if (all.isNotEmpty && !force) return;
@@ -189,8 +244,10 @@ class Reciters extends ChangeNotifier {
       if (parsed.isEmpty) throw Exception('empty');
       all = parsed;
       try {
-        final dir = await getApplicationDocumentsDirectory();
-        await File('${dir.path}/mp3quran_reciters.json').writeAsString(body);
+        if (!kIsWeb) {
+          final dir = await getApplicationDocumentsDirectory();
+          await File('${dir.path}/mp3quran_reciters.json').writeAsString(body);
+        }
       } catch (_) {}
     } catch (_) {
       allError = 'تعذّر تحميل قائمة القرّاء، تأكد من الاتصال بالإنترنت ثم أعد المحاولة';

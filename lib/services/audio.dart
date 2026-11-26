@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -24,6 +25,13 @@ class AudioCtl extends ChangeNotifier {
   bool _continue = false;
   Reciter? playingReciter;
 
+  // Continuous (whole surah) playback with ayah timings.
+  List<List<int>>? _timing; // [ayah, startMs, endMs]
+  int _timedSurah = 0;
+  int? _stopAtMs;
+  int? _loopFromMs;
+  final Map<String, List<List<int>>> _timingCache = {};
+
   /// Download progress per key "reciterId|surah" (0..1).
   final Map<String, double> downloads = {};
 
@@ -37,6 +45,29 @@ class AudioCtl extends ChangeNotifier {
       if (i != null && i >= 0 && i < _queue.length) {
         currentG = _queue[i];
         notifyListeners();
+      }
+    });
+    player.positionStream.listen((pos) {
+      final t = _timing;
+      if (t == null || !active) return;
+      final ms = pos.inMilliseconds;
+      if (_stopAtMs != null && ms >= _stopAtMs!) {
+        if (_loopFromMs != null) {
+          player.seek(Duration(milliseconds: _loopFromMs!));
+        } else {
+          stop();
+        }
+        return;
+      }
+      for (final e in t) {
+        if (e[0] >= 1 && ms >= e[1] && ms < e[2]) {
+          final g = QuranData.I.gOf(_timedSurah, e[0]);
+          if (g != currentG) {
+            currentG = g;
+            notifyListeners();
+          }
+          break;
+        }
       }
     });
     player.playerStateStream.listen((st) {
@@ -71,6 +102,11 @@ class AudioCtl extends ChangeNotifier {
     final r = Reciters.I.current;
     final q = QuranData.I;
     error = null;
+    if (r.timed) {
+      await _playTimed(r, fromG, toG, continueAfter);
+      return;
+    }
+    _timing = null;
     if (!r.perAyah) {
       await playSurah(q.ayahs[fromG].s);
       return;
@@ -121,10 +157,12 @@ class AudioCtl extends ChangeNotifier {
     final r = reciter ?? Reciters.I.current;
     final q = QuranData.I;
     error = null;
-    if (r.perAyah) {
+    if (r.perAyah || r.timed) {
+      if (reciter != null && Reciters.I.currentId != r.id) Reciters.I.select(r.id);
       await playRange(q.surahStart[s], q.surahEndG(s), continueAfter: true);
       return;
     }
+    _timing = null;
     if (!r.hasSurah(s)) {
       error = 'هذه السورة غير متوفرة بصوت هذا القارئ';
       notifyListeners();
@@ -148,6 +186,121 @@ class AudioCtl extends ChangeNotifier {
       active = false;
       surahPlaying = null;
       notifyListeners();
+    }
+  }
+
+  Future<List<List<int>>?> _loadTiming(Reciter r, int s) async {
+    final key = '${r.id}|$s';
+    if (_timingCache.containsKey(key)) return _timingCache[key];
+    File? f;
+    if (_docs.isNotEmpty) f = File('$_docs/timing_${_safe(r.id)}_$s.json');
+    String? body;
+    try {
+      if (f != null && await f.exists()) body = await f.readAsString();
+    } catch (_) {}
+    if (body == null) {
+      try {
+        final res = await http
+            .get(Uri.parse('https://mp3quran.net/api/v3/ayat_timing?surah=$s&read=${r.readId}'))
+            .timeout(const Duration(seconds: 25));
+        if (res.statusCode == 200) {
+          body = utf8.decode(res.bodyBytes);
+          try {
+            await f?.writeAsString(body);
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+    if (body == null) return null;
+    try {
+      final j = jsonDecode(body);
+      final list = j is List ? j : ((j as Map)['data'] ?? j['timing'] ?? []) as List;
+      final out = <List<int>>[];
+      for (final e in list) {
+        final m = e as Map<String, dynamic>;
+        out.add([
+          (m['ayah'] as num).toInt(),
+          (m['start_time'] as num).toInt(),
+          (m['end_time'] as num).toInt(),
+        ]);
+      }
+      if (out.isEmpty) return null;
+      _timingCache[key] = out;
+      return out;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _playTimed(Reciter r, int fromG, int toG, bool continueAfter) async {
+    final q = QuranData.I;
+    final st = AppSettings.I;
+    final s = q.ayahs[fromG].s;
+    final a1 = q.ayahs[fromG].a;
+    final a2 = q.ayahs[toG].s == s ? q.ayahs[toG].a : q.surahCount[s];
+    _queue = [];
+    surahPlaying = null;
+    playingReciter = r;
+    active = true;
+    currentG = fromG;
+    _lastG = q.gOf(s, a2);
+    _continue = continueAfter && st.repeatRange == 1 && st.continueNext;
+    notifyListeners();
+    final t = await _loadTiming(r, s);
+    if (t == null) {
+      error = 'تعذّر تحميل توقيت الآيات لهذا القارئ، تأكد من الإنترنت أو اختر قارئًا آخر';
+      active = false;
+      currentG = null;
+      notifyListeners();
+      return;
+    }
+    int startOf(int a) {
+      for (final e in t) {
+        if (e[0] == a) return e[1];
+      }
+      return 0;
+    }
+
+    int endOf(int a) {
+      for (final e in t) {
+        if (e[0] == a) return e[2];
+      }
+      return 1 << 30;
+    }
+
+    final whole = a2 >= q.surahCount[s];
+    final from = a1 <= 1 ? 0 : startOf(a1);
+    try {
+      await player.stop();
+      _timing = null;
+      await player.setLoopMode(st.repeatRange == 0 && whole && a1 <= 1 ? LoopMode.one : LoopMode.off);
+      await player.setSpeed(st.speed);
+      await player.setAudioSource(_src(localSurah(r, s), r.surahUrl(s)),
+          initialPosition: Duration(milliseconds: from));
+      _timedSurah = s;
+      _stopAtMs = whole ? null : endOf(a2);
+      _loopFromMs = st.repeatRange == 0 && !whole ? from : null;
+      _timing = t;
+      player.play();
+    } catch (e) {
+      error = 'تعذّر تشغيل التلاوة، تأكد من الاتصال بالإنترنت';
+      active = false;
+      currentG = null;
+      _timing = null;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _seekAyah(int delta) async {
+    final t = _timing;
+    if (t == null) return;
+    final cur = currentG == null ? 1 : QuranData.I.ayahs[currentG!].a;
+    final target = cur + delta;
+    for (final e in t) {
+      if (e[0] == target) {
+        await player.seek(Duration(milliseconds: e[1]));
+        return;
+      }
     }
   }
 
@@ -190,6 +343,7 @@ class AudioCtl extends ChangeNotifier {
 
   Future<void> stop() async {
     _continue = false;
+    _timing = null;
     await player.stop();
     active = false;
     currentG = null;
@@ -198,6 +352,10 @@ class AudioCtl extends ChangeNotifier {
   }
 
   Future<void> next() async {
+    if (_timing != null) {
+      await _seekAyah(1);
+      return;
+    }
     if (surahPlaying != null) {
       if (surahPlaying! < 114) await playSurah(surahPlaying! + 1, reciter: playingReciter);
       return;
@@ -214,6 +372,10 @@ class AudioCtl extends ChangeNotifier {
   }
 
   Future<void> previous() async {
+    if (_timing != null) {
+      await _seekAyah(-1);
+      return;
+    }
     if (surahPlaying != null) {
       if (surahPlaying! > 1) await playSurah(surahPlaying! - 1, reciter: playingReciter);
       return;

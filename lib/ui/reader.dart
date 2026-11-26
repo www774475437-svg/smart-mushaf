@@ -130,7 +130,6 @@ class _MushafScreenState extends State<MushafScreen> {
     setState(() {
       autoOn = true;
       autoPaused = false;
-      bars = false;
     });
     WakelockPlus.enable();
     _schedule();
@@ -347,8 +346,8 @@ class _MushafScreenState extends State<MushafScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (autoOn) _autoPill(col),
-          const AudioBar(),
+          if (autoOn && bars) _autoPill(col),
+          if (bars) const AudioBar(),
           IgnorePointer(
             ignoring: !bars,
             child: AnimatedOpacity(

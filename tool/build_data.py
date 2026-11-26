@@ -281,14 +281,14 @@ if not os.path.exists(os.path.join(OUT, 'layout.json.gz')):
         pg = 1
         while True:
             d = fetch_json('https://api.quran.com/api/v4/verses/by_page/%d?words=true&per_page=50&page=%d'
-                           '&word_fields=text_qpc_hafs,text_uthmani,line_number' % (p, pg), tries=5, quiet=True)
+                           '&word_fields=text_qpc_hafs,text_uthmani,line_number,code_v1' % (p, pg), tries=5, quiet=True)
             for v in d.get('verses', []):
                 ss, aa = v['verse_key'].split(':')
                 gi = START[int(ss)] + int(aa) - 1
                 for w in v.get('words', []):
                     t = w.get('text_qpc_hafs') or w.get('text_uthmani') or w.get('text') or ''
                     out.append((int(w.get('line_number') or 0), gi, t, 1 if w.get('char_type_name') == 'end' else 0,
-                                int(ss), int(aa)))
+                                int(ss), int(aa), w.get('code_v1') or ''))
             nxt = (d.get('pagination') or {}).get('next_page')
             if not nxt:
                 break
@@ -303,17 +303,17 @@ if not os.path.exists(os.path.join(OUT, 'layout.json.gz')):
         for pi, words in enumerate(allp):
             p = pi + 1
             lines = {}
-            for ln, gi, t, e, ss, aa in words:
-                lines.setdefault(ln, []).append((gi, t, e, ss, aa))
+            for ln, gi, t, e, ss, aa, cv in words:
+                lines.setdefault(ln, []).append((gi, t, e, ss, aa, cv))
             if p == 1:
-                basmala = ' '.join(t for ln, gi, t, e, ss, aa in words if ss == 1 and aa == 1 and not e)
+                basmala = ' '.join(t for ln, gi, t, e, ss, aa, cv in words if ss == 1 and aa == 1 and not e)
             total = max(lines) if p in (1, 2) else 15
             res = [None] * total
             last_s = words[-1][4] if words else 1
             ln = 1
             while ln <= total:
                 if ln in lines:
-                    res[ln - 1] = ['w', [[gi, t, e] for gi, t, e, ss, aa in lines[ln]]]
+                    res[ln - 1] = ['w', [[gi, t, e, cv] for gi, t, e, ss, aa, cv in lines[ln]]]
                     ln += 1
                     continue
                 run = [ln]
@@ -340,6 +340,50 @@ if not os.path.exists(os.path.join(OUT, 'layout.json.gz')):
         write_gz('layout.json.gz', {'b': basmala, 'p': pages})
     except Exception as e:  # noqa
         print('WARNING: mushaf layout not built:', e)
+
+
+# ---------------- Mushaf page fonts (one font per page, as printed) ----------------
+QCF = 'assets/qcf'
+os.makedirs(QCF, exist_ok=True)
+open(os.path.join(QCF, 'keep.txt'), 'w').write('qcf')
+QCF_URLS = [
+    'https://raw.githubusercontent.com/quran/quran.com-frontend-next/production/public/fonts/quran/hafs/v1/ttf/p%d.ttf',
+    'https://raw.githubusercontent.com/quran/quran.com-frontend-next/master/public/fonts/quran/hafs/v1/ttf/p%d.ttf',
+    'https://verses.quran.foundation/fonts/quran/hafs/v1/ttf/p%d.ttf',
+    'https://static.qurancdn.com/fonts/quran/hafs/v1/ttf/p%d.ttf',
+]
+
+
+def qcf_one(n):
+    p = os.path.join(QCF, 'p%d.ttf' % n)
+    if os.path.exists(p) and os.path.getsize(p) > 5000:
+        return True
+    for u in QCF_URLS:
+        try:
+            b = fetch(u % n, tries=2, quiet=True)
+            if len(b) > 5000 and b[:4] in (b'\x00\x01\x00\x00', b'OTTO', b'true'):
+                open(p, 'wb').write(b)
+                return True
+        except Exception:  # noqa
+            pass
+    return False
+
+
+qcf_ok = False
+try:
+    if qcf_one(1):
+        with concurrent.futures.ThreadPoolExecutor(8) as ex:
+            qcf_ok = all(ex.map(qcf_one, range(1, 605)))
+except Exception as e:  # noqa
+    print('qcf failed', e)
+try:
+    lay = json.loads(gzip.open(os.path.join(OUT, 'layout.json.gz')).read().decode('utf-8'))
+    has_codes = all(len(w) > 3 and w[3] for l in lay['p'][2] if l and l[0] == 'w' for w in l[1])
+except Exception:  # noqa
+    has_codes = False
+write('qcf.json', bool(qcf_ok and has_codes))
+print('qcf fonts', qcf_ok, 'codes', has_codes,
+      sum(os.path.getsize(os.path.join(QCF, f)) for f in os.listdir(QCF)))
 
 # ---------------- Fonts ----------------
 FONT_SOURCES = {
