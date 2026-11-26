@@ -249,7 +249,7 @@ class _MistakesTab extends StatelessWidget {
                   title: Text(q.ayahs[m.g].text,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 17, height: 1.8)),
+                      style: TextStyle(fontFamily: quranFont(), fontSize: 17, height: 1.8)),
                   subtitle: Text(
                       '${q.ayahs[m.g].ref} • أخطأت ${ar(m.count)} ${m.count == 1 ? 'مرة' : 'مرات'}'
                       '${m.missing.isEmpty ? '' : '\nكلمات: ${m.missing.take(8).join('، ')}'}',
@@ -535,7 +535,7 @@ class _VoiceTestScreenState extends State<VoiceTestScreen> {
         decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(6)),
       );
     }
-    return Text(w, style: TextStyle(fontFamily: 'AmiriQuran', fontSize: 23, height: 2, color: color));
+    return Text(w, style: TextStyle(fontFamily: quranFont(), fontSize: 23, height: 2, color: color));
   }
 }
 
@@ -609,9 +609,9 @@ class _HideTestScreenState extends State<HideTestScreen> {
                                           borderRadius: BorderRadius.circular(6),
                                         ),
                                       )
-                                    : Text(words[i], style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 21, height: 2)),
+                                    : Text(words[i], style: TextStyle(fontFamily: quranFont(), fontSize: 21, height: 2)),
                               ),
-                            Text('﴿${ar(ay.a)}﴾', style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 18, color: kGoldDeep, height: 2)),
+                            Text('﴿${ar(ay.a)}﴾', style: TextStyle(fontFamily: quranFont(), fontSize: 18, color: kGoldDeep, height: 2)),
                           ],
                         ),
                         Row(

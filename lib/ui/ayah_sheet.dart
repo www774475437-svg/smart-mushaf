@@ -312,6 +312,45 @@ class _AyahSheetState extends State<AyahSheet> {
                 ),
               ),
             ),
+            if (QuranData.I.asbab[g] != null) ...[
+              const SizedBox(height: 14),
+              const Text('سبب النزول', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const Text('من «الصحيح المسند من أسباب النزول» للشيخ مقبل الوادعي رَحِمَهُ الله',
+                  style: TextStyle(fontSize: 12, color: kGoldDeep)),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: kGold.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: SelectableText(QuranData.I.asbab[g]!, style: const TextStyle(fontSize: 16, height: 1.85)),
+              ),
+            ],
+            if ((QuranData.I.similar[g] ?? const <int>[]).isNotEmpty) ...[
+              const SizedBox(height: 14),
+              const Text('آيات متشابهة', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const Text('آيات تشبهها في اللفظ، تفيد الحافظ في ضبط المتشابهات', style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 6),
+              for (final o in QuranData.I.similar[g]!)
+                Card(
+                  elevation: 0,
+                  color: cs.primary.withValues(alpha: 0.05),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  child: ListTile(
+                    title: Text(QuranData.I.ayahs[o].text,
+                        style: TextStyle(fontFamily: quranFont(), fontSize: 18, height: 1.9)),
+                    subtitle: Text(QuranData.I.ayahs[o].ref, style: const TextStyle(color: kGoldDeep)),
+                    onTap: () {
+                      Tts.I.stop();
+                      setState(() {
+                        g = o;
+                        _load();
+                      });
+                    },
+                  ),
+                ),
+            ],
             const SizedBox(height: 14),
             const Text('التفسير', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
             const SizedBox(height: 8),

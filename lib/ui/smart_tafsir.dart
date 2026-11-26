@@ -146,7 +146,7 @@ class _SmartTafsirScreenState extends State<SmartTafsirScreen> {
                   title: Text(q.ayahs[g].text,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 17, height: 1.8)),
+                      style: TextStyle(fontFamily: quranFont(), fontSize: 17, height: 1.8)),
                   subtitle: Text(q.ayahs[g].ref),
                   onTap: () => setState(() {
                     page = q.ayahs[g].page;
@@ -240,6 +240,19 @@ class _SmartTafsirScreenState extends State<SmartTafsirScreen> {
             for (final g in ids)
               _AyahTafsir(key: ValueKey('$tafsirId:$g'), g: g, tafsirId: tafsirId, cs: cs),
             const SizedBox(height: 16),
+            Material(
+              color: cs.surface,
+              borderRadius: BorderRadius.circular(18),
+              child: ListTile(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                leading: const IconSquare(Icons.history_edu_rounded, Color(0xFF6D4C41)),
+                title: const Text('أسباب النزول', style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('الصحيح المسند من أسباب النزول — مقبل الوادعي'),
+                trailing: const Icon(Icons.chevron_left_rounded),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AsbabScreen())),
+              ),
+            ),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -287,7 +300,7 @@ class _AyahTafsirState extends State<_AyahTafsir> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('${ay.text} ﴿${ar(ay.a)}﴾',
-              textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 19, height: 1.9)),
+              textAlign: TextAlign.center, style: TextStyle(fontFamily: quranFont(), fontSize: 19, height: 1.9)),
           const Divider(),
           FutureBuilder<String>(
             future: f,
@@ -303,6 +316,61 @@ class _AyahTafsirState extends State<_AyahTafsir> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class AsbabScreen extends StatelessWidget {
+  const AsbabScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final q = QuranData.I;
+    final keys = q.asbab.keys.toList()..sort();
+    return Scaffold(
+      appBar: AppBar(title: const Text('أسباب النزول')),
+      body: keys.isEmpty
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(28),
+                child: Text(
+                  'سيُضاف هنا كتاب «الصحيح المسند من أسباب النزول» للشيخ مقبل بن هادي الوادعي رَحِمَهُ الله بنصّه، وتظهر كل رواية تحت آيتها في المصحف.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(height: 1.8),
+                ),
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: keys.length,
+              itemBuilder: (_, i) {
+                final g = keys[i];
+                final ay = q.ayahs[g];
+                return Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(ay.ref, style: const TextStyle(color: kGoldDeep, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 6),
+                        Text(ay.text, style: TextStyle(fontFamily: quranFont(), fontSize: 18, height: 1.9)),
+                        const Divider(),
+                        Text(q.asbab[g]!, style: const TextStyle(height: 1.8)),
+                        Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: TextButton(
+                            onPressed: () => MushafScreen.open(context, ay.page, flashG: g),
+                            child: const Text('افتح في المصحف'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }

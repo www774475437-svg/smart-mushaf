@@ -248,11 +248,8 @@ class AppFonts {
   }
 }
 
-/// The mushaf font the reader chose (falls back to Amiri Quran).
-String quranFont() {
-  final f = AppSettings.I.quranFont;
-  return AppFonts.available.contains(f) ? f : 'AmiriQuran';
-}
+/// One fixed mushaf font: the King Fahd Complex Uthmani script (Amiri Quran if missing).
+String quranFont() => AppFonts.available.contains('UthmanicHafs') ? 'UthmanicHafs' : 'AmiriQuran';
 
 /// Placeholder for features that will be switched on later.
 Future<void> showSoon(BuildContext context, {String? title}) {

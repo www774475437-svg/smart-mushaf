@@ -120,7 +120,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     title: Text(q.ayahs[g].text,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 18, height: 1.9)),
+                        style: TextStyle(fontFamily: quranFont(), fontSize: 18, height: 1.9)),
                     subtitle: Text('${q.ayahs[g].ref} • صفحة ${ar(q.ayahs[g].page)}',
                         style: const TextStyle(color: kGoldDeep, fontWeight: FontWeight.w600)),
                     onTap: () => MushafScreen.open(context, q.ayahs[g].page, flashG: g),

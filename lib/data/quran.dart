@@ -65,6 +65,8 @@ class QuranData {
   final List<bool> surahMeccan = List.filled(115, true);
   final List<int> juzStartG = List.filled(31, -1);
   bool loaded = false;
+  Map<int, List<int>> similar = {};
+  Map<int, String> asbab = {};
 
   Future<void> load() async {
     if (loaded) return;
@@ -87,6 +89,14 @@ class QuranData {
     for (var i = 0; i < t.length && i < 114; i++) {
       surahMeccan[i + 1] = t[i] == 'Meccan';
     }
+    try {
+      final sm = (await compute(decodeJson, await rootBundle.loadString('assets/data/similar.json'))) as Map<String, dynamic>;
+      similar = sm.map((k, v) => MapEntry(int.parse(k), List<int>.from(v as List)));
+    } catch (_) {}
+    try {
+      final ab = jsonDecode(await rootBundle.loadString('assets/data/asbab.json')) as Map<String, dynamic>;
+      asbab = ab.map((k, v) => MapEntry(int.parse(k), v as String));
+    } catch (_) {}
     loaded = true;
   }
 

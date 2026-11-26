@@ -56,26 +56,6 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 Slider(min: 16, max: 40, divisions: 24, value: st.fontSize, onChanged: (v) => st.fontSize = v),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(children: [
-                        IconSquare(Icons.font_download_rounded, Color(0xFF00695C)),
-                        SizedBox(width: 14),
-                        Text('خط المصحف', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15.5)),
-                      ]),
-                      const SizedBox(height: 10),
-                      Pills<String>(
-                        values: AppFonts.available,
-                        selected: quranFont(),
-                        label: (f) => kQuranFonts[f] ?? f,
-                        onChanged: (f) => st.quranFont = f,
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                   child: Text('ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَٰلَمِينَ',
                       textAlign: TextAlign.center,

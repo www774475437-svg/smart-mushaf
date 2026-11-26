@@ -223,6 +223,56 @@ for tid, (cloud, slugs, qcom) in TAFSIRS.items():
         print('WARNING: tafsir', tid, 'not bundled; app will read it online')
 write('tafsirs.json', bundled)
 
+# ---------------- Similar ayahs (المتشابهات) ----------------
+if not os.path.exists(os.path.join(OUT, 'similar.json')):
+    def norm(t):
+        t = re.sub(r'[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]', '', t)
+        t = re.sub(r'[أإآٱ]', 'ا', t).replace('ى', 'ي').replace('ة', 'ه')
+        return t.split()
+    words = [norm(t) for t in meta['c']]
+    shingles = []
+    index = {}
+    for gi, w in enumerate(words):
+        sh = set(' '.join(w[i:i + 3]) for i in range(max(0, len(w) - 2)))
+        if len(w) < 3:
+            sh = {' '.join(w)} if w else set()
+        shingles.append(sh)
+        for x in sh:
+            index.setdefault(x, []).append(gi)
+    sim = {}
+    for gi, sh in enumerate(shingles):
+        if not sh:
+            continue
+        cnt = {}
+        for x in sh:
+            lst = index[x]
+            if len(lst) > 40:  # very common phrase, not useful
+                continue
+            for o in lst:
+                if o != gi:
+                    cnt[o] = cnt.get(o, 0) + 1
+        best = []
+        for o, c in cnt.items():
+            score = c / max(1, min(len(sh), len(shingles[o])))
+            if c >= 2 and score >= 0.45:
+                best.append((score, c, o))
+        best.sort(reverse=True)
+        if best:
+            sim[gi] = [o for _, _, o in best[:6]]
+    write('similar.json', {str(k): v for k, v in sim.items()})
+    print('similar ayahs for', len(sim))
+
+# ---------------- Asbab al-nuzul ----------------
+# Filled from the book «الصحيح المسند من أسباب النزول» (مقبل الوادعي) when its text is provided
+# in tool/asbab.json as {"surah:ayah": "text"}.
+src = 'tool/asbab.json'
+asb = {}
+if os.path.exists(src):
+    for k, v in json.load(open(src, encoding='utf-8')).items():
+        ss, aa = k.split(':')
+        asb[str(START[int(ss)] + int(aa) - 1)] = v
+write('asbab.json', asb)
+
 # ---------------- Fonts ----------------
 FONT_SOURCES = {
     'AmiriQuran-Regular.ttf': ['https://github.com/google/fonts/raw/main/ofl/amiriquran/AmiriQuran-Regular.ttf'],

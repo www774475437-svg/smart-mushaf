@@ -60,11 +60,11 @@ class _RiwayaReaderState extends State<RiwayaReader> {
               if (s != 1 && s != 9)
                 Text('بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontFamily: 'AmiriQuran', fontSize: AppSettings.I.fontSize, color: col.text, height: 2)),
+                    style: TextStyle(fontFamily: quranFont(), fontSize: AppSettings.I.fontSize, color: col.text, height: 2)),
               Text.rich(
                 TextSpan(children: spans),
                 textAlign: TextAlign.justify,
-                style: TextStyle(fontFamily: 'AmiriQuran', fontSize: AppSettings.I.fontSize, height: 2.1, color: col.text),
+                style: TextStyle(fontFamily: quranFont(), fontSize: AppSettings.I.fontSize, height: 2.1, color: col.text),
               ),
               const SizedBox(height: 20),
               Row(
