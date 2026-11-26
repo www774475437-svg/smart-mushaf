@@ -49,6 +49,7 @@ class AudioCtl extends ChangeNotifier {
         notifyListeners();
       }
     });
+    Reciters.I.addListener(_onReciterChanged);
     player.positionStream.listen((pos) {
       final t = _timing;
       if (t == null || !active) return;
@@ -106,6 +107,9 @@ class AudioCtl extends ChangeNotifier {
   /// Plays ayahs [fromG..toG] with the current reciter.
   Future<void> playRange(int fromG, int toG, {bool continueAfter = false, bool forceAyah = false}) async {
     customTitle = null;
+    _selId = Reciters.I.currentId;
+    _reqTo = toG;
+    _reqCont = continueAfter;
     var r = Reciters.I.current;
     if (!forceAyah && r.perAyah && AppSettings.I.repeatAyah <= 1) {
       // Prefer the continuous recording of the same reciter so the recitation sounds natural.
@@ -174,6 +178,7 @@ class AudioCtl extends ChangeNotifier {
 
   Future<void> playSurah(int s, {Reciter? reciter}) async {
     final r = reciter ?? Reciters.I.current;
+    _selId = r.id;
     final q = QuranData.I;
     error = null;
     if (r.perAyah || r.timed) {
@@ -380,6 +385,32 @@ class AudioCtl extends ChangeNotifier {
       active = false;
       customTitle = null;
       notifyListeners();
+    }
+  }
+
+  String _selId = '';
+  int _reqTo = 0;
+  bool _reqCont = false;
+
+  /// Changing the reciter while listening continues from the same ayah in the new voice.
+  void _onReciterChanged() {
+    final id = Reciters.I.currentId;
+    if (id == _selId) return;
+    _selId = id;
+    if (!active || customTitle != null) return;
+    final q = QuranData.I;
+    if (currentG != null) {
+      final g = currentG!;
+      final to = _reqTo >= g ? _reqTo : q.surahEndG(q.ayahs[g].s);
+      playRange(g, to, continueAfter: _reqCont);
+    } else if (surahPlaying != null) {
+      final s = surahPlaying!;
+      final r = Reciters.I.current;
+      if (r.perAyah || r.timed) {
+        playRange(q.surahStart[s], q.surahEndG(s), continueAfter: true);
+      } else {
+        playSurah(s);
+      }
     }
   }
 
