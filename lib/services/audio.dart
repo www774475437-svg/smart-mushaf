@@ -98,13 +98,25 @@ class AudioCtl extends ChangeNotifier {
   }
 
   /// Plays ayahs [fromG..toG] with the current reciter.
-  Future<void> playRange(int fromG, int toG, {bool continueAfter = false}) async {
-    final r = Reciters.I.current;
+  Future<void> playRange(int fromG, int toG, {bool continueAfter = false, bool forceAyah = false}) async {
+    var r = Reciters.I.current;
+    if (!forceAyah && r.perAyah && AppSettings.I.repeatAyah <= 1) {
+      // Prefer the continuous recording of the same reciter so the recitation sounds natural.
+      final t = Reciters.I.timedFor(r);
+      if (t != null) {
+        await _playTimed(t, fromG, toG, continueAfter, fallback: true);
+        return;
+      }
+    }
     final q = QuranData.I;
     error = null;
     if (r.timed) {
-      await _playTimed(r, fromG, toG, continueAfter);
-      return;
+      if (forceAyah) {
+        r = Reciters.I.perAyah.first;
+      } else {
+        await _playTimed(r, fromG, toG, continueAfter);
+        return;
+      }
     }
     _timing = null;
     if (!r.perAyah) {
@@ -232,7 +244,7 @@ class AudioCtl extends ChangeNotifier {
     }
   }
 
-  Future<void> _playTimed(Reciter r, int fromG, int toG, bool continueAfter) async {
+  Future<void> _playTimed(Reciter r, int fromG, int toG, bool continueAfter, {bool fallback = false}) async {
     final q = QuranData.I;
     final st = AppSettings.I;
     final s = q.ayahs[fromG].s;
@@ -247,6 +259,10 @@ class AudioCtl extends ChangeNotifier {
     _continue = continueAfter && st.repeatRange == 1 && st.continueNext;
     notifyListeners();
     final t = await _loadTiming(r, s);
+    if (t == null && fallback) {
+      await playRange(fromG, toG, continueAfter: continueAfter, forceAyah: true);
+      return;
+    }
     if (t == null) {
       error = 'تعذّر تحميل توقيت الآيات لهذا القارئ، تأكد من الإنترنت أو اختر قارئًا آخر';
       active = false;

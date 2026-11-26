@@ -130,36 +130,55 @@ class _MushafLinesPageState extends State<MushafLinesPage> {
           final n = l.words.length;
           final gap = centered ? fs * (glyphs ? 0.04 : 0.11) : math.max(0.0, (w - natural) / (2 * n));
           final kids = <Widget>[];
+          // background of each word, so neighbouring words of one ayah join into one rounded shape
+          final bgs = List<Color?>.filled(n, null);
+          final fgs = List<Color>.filled(n, col.text);
+          for (var k = 0; k < n; k++) {
+            final wd = l.words[k];
+            if (widget.marks != null && widget.marks!.contains('$i:$k')) {
+              bgs[k] = Colors.red.withValues(alpha: 0.16);
+              fgs[k] = Colors.red.shade700;
+            } else if (wd.g == audioG) {
+              bgs[k] = col.accent.withValues(alpha: 0.24);
+            } else if (wd.g == widget.selectedG) {
+              bgs[k] = col.accent.withValues(alpha: 0.30);
+            } else if (hl[wd.g] != null) {
+              bgs[k] = kHighlightColors[hl[wd.g]!.clamp(0, kHighlightColors.length - 1)].withValues(alpha: 0.42);
+            }
+            if (wd.end && !glyphs && fgs[k] == col.text) fgs[k] = col.accent;
+          }
+          final rad = Radius.circular(lineH * 0.22);
           for (var k = 0; k < n; k++) {
             final wd = l.words[k];
             final key = '$i:$k';
-            Color? bg;
-            var color = col.text;
-            if (widget.marks != null && widget.marks!.contains(key)) {
-              bg = Colors.red.withValues(alpha: 0.16);
-              color = Colors.red.shade700;
-            } else if (wd.g == audioG) {
-              bg = col.accent.withValues(alpha: 0.22);
-            } else if (wd.g == widget.selectedG) {
-              bg = kEmerald.withValues(alpha: 0.16);
-            } else if (hl[wd.g] != null) {
-              bg = kHighlightColors[hl[wd.g]!.clamp(0, kHighlightColors.length - 1)].withValues(alpha: 0.4);
-            }
-            if (wd.end && !glyphs && color == col.text) color = col.accent;
+            final bg = bgs[k];
+            final startRun = k == 0 || bgs[k - 1] != bg;
+            final endRun = k == n - 1 || bgs[k + 1] != bg;
             kids.add(GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: widget.onWordTap == null ? null : () => widget.onWordTap!(key, wd),
               onLongPress: () => widget.onLongPress(wd.g),
               child: Container(
-                color: bg,
-                height: lineH,
+                height: lineH * 0.9,
                 alignment: Alignment.center,
                 padding: EdgeInsets.symmetric(horizontal: gap),
+                decoration: bg == null
+                    ? null
+                    : BoxDecoration(
+                        color: bg,
+                        // the line reads right to left: a run starts on the right
+                        borderRadius: BorderRadius.only(
+                          topRight: startRun ? rad : Radius.zero,
+                          bottomRight: startRun ? rad : Radius.zero,
+                          topLeft: endRun ? rad : Radius.zero,
+                          bottomLeft: endRun ? rad : Radius.zero,
+                        ),
+                      ),
                 child: Text(glyphs ? wd.c : wd.t,
                     textDirection: TextDirection.rtl,
                     softWrap: false,
                     overflow: TextOverflow.visible,
-                    style: TextStyle(fontFamily: font, fontSize: fs, color: color, height: glyphs ? 1.3 : 1.6)),
+                    style: TextStyle(fontFamily: font, fontSize: fs, color: fgs[k], height: glyphs ? 1.3 : 1.6)),
               ),
             ));
           }

@@ -145,6 +145,23 @@ class Reciters extends ChangeNotifier {
     return null;
   }
 
+  /// The continuous (whole-surah, timed) recitation of the same reciter, if there is one.
+  Reciter? timedFor(Reciter r) {
+    if (r.timed) return r;
+    final name = r.name.split('(').first.trim();
+    final parts = name.split(' ').where((e) => e.length > 2).toList();
+    if (parts.isEmpty) return null;
+    final murattalOnly = !r.name.contains('مجود');
+    for (final t in timed) {
+      if (parts.every((p) => t.name.contains(p)) && (murattalOnly ? !t.sub.contains('مجود') : true)) return t;
+    }
+    final last = parts.last;
+    for (final t in timed) {
+      if (t.name.contains(last) && t.name.contains(parts.first) && !t.sub.contains('مجود')) return t;
+    }
+    return null;
+  }
+
   Reciter get current => byId(_currentId) ?? perAyah.first;
   String get currentId => current.id;
 

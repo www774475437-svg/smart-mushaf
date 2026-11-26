@@ -6,6 +6,7 @@ import '../data/surah_names.dart';
 import '../services/audio.dart';
 import '../services/settings.dart';
 import '../services/store.dart';
+import 'ayah_sheet.dart';
 import 'common.dart';
 import 'reader.dart';
 import 'riwaya_reader.dart';
@@ -125,7 +126,7 @@ class _IndexScreenState extends State<IndexScreen> {
               builder: (context, _) {
                 final bs = UserStore.I.bookmarks;
                 final hl = UserStore.I.highlights.keys.toList()..sort();
-                if (bs.isEmpty && hl.isEmpty && UserStore.I.notes.isEmpty) {
+                if (bs.isEmpty && hl.isEmpty && UserStore.I.notes.isEmpty && UserStore.I.fawasil.isEmpty) {
                   return const Center(
                     child: Padding(
                       padding: EdgeInsets.all(30),
@@ -136,6 +137,15 @@ class _IndexScreenState extends State<IndexScreen> {
                 }
                 return ListView(
                   children: [
+                    for (var i = 0; i < 4; i++)
+                      if (UserStore.I.fawasil[i] != null)
+                        ListTile(
+                          leading: Icon(Icons.bookmark_rounded, color: kFasilColors[i], size: 28),
+                          title: Text('الفاصل ${kFasilNames[i]}'),
+                          subtitle: Text(q.ayahs[UserStore.I.fawasil[i]![0]].ref),
+                          onTap: () => MushafScreen.open(context, q.ayahs[UserStore.I.fawasil[i]![0]].page,
+                              flashG: UserStore.I.fawasil[i]![0]),
+                        ),
                     for (final b in bs)
                       ListTile(
                         leading: const Icon(Icons.bookmark_rounded, color: kGold),

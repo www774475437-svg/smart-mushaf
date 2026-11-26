@@ -15,14 +15,53 @@ import 'memorize.dart';
 import 'reciters_screen.dart';
 import 'share_image.dart';
 
+const List<Color> kFasilColors = [Color(0xFFB3352E), Color(0xFFC9A227), Color(0xFF3F8F3A), Color(0xFF2F68C4)];
+const List<String> kFasilNames = ['الأحمر', 'الأصفر', 'الأخضر', 'الأزرق'];
+
+Color _sheetBg(BuildContext c) => isDark(c) ? const Color(0xFF0E1614) : const Color(0xFFF4F0E8);
+Color _cardBg(BuildContext c) => isDark(c) ? const Color(0xFF17211E) : const Color(0xFFFFFCF7);
+
 Future<void> showAyahSheet(BuildContext context, int g) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
+    barrierColor: Colors.black26,
     builder: (_) => AyahSheet(g: g),
   );
+}
+
+class _Title extends StatelessWidget {
+  final String t;
+  const _Title(this.t);
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(6, 18, 6, 10),
+        child: Text(t, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
+      );
+}
+
+/// A soft rounded card button used across the sheet.
+class _Tile extends StatelessWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final EdgeInsets padding;
+  const _Tile({required this.child, this.onTap, this.onLongPress, this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 16)});
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _cardBg(context),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Padding(padding: padding, child: child),
+      ),
+    );
+  }
 }
 
 class AyahSheet extends StatefulWidget {
@@ -34,37 +73,13 @@ class AyahSheet extends StatefulWidget {
 
 class _AyahSheetState extends State<AyahSheet> {
   late int g;
-  late String tafsirId;
   late Future<String> tf;
-  Future<List<String>>? tr;
 
   @override
   void initState() {
     super.initState();
     g = widget.g;
-    tafsirId = AppSettings.I.tafsirId;
-    _load();
-  }
-
-  @override
-  void dispose() {
-    Tts.I.stop();
-    super.dispose();
-  }
-
-  void _load() {
-    tf = TafsirService.I.get(tafsirId, g);
-    if (AppSettings.I.showTranslation) tr = QuranData.I.translation();
-  }
-
-  void _move(int d) {
-    final n = g + d;
-    if (n < 0 || n > 6235) return;
-    Tts.I.stop();
-    setState(() {
-      g = n;
-      _load();
-    });
+    tf = TafsirService.I.get(AppSettings.I.tafsirId, g);
   }
 
   Ayah get ay => QuranData.I.ayahs[g];
@@ -75,47 +90,100 @@ class _AyahSheetState extends State<AyahSheet> {
     toast(context, msg);
   }
 
-  Future<void> _pickRange() async {
+  void _play(int toG, {bool cont = false}) {
+    AudioCtl.I.playRange(g, toG, continueAfter: cont);
+    Navigator.pop(context);
+  }
+
+  void _playTo() {
     final q = QuranData.I;
-    final n = q.surahCount[ay.s];
-    var from = ay.a;
-    var to = n;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setD) => AlertDialog(
-          title: Text('تشغيل من آية إلى آية\nسورة ${surahName(ay.s)}', textAlign: TextAlign.center),
-          content: Row(
-            children: [
-              const Text('من '),
-              DropdownButton<int>(
-                value: from,
-                items: [for (var i = 1; i <= n; i++) DropdownMenuItem(value: i, child: Text(ar(i)))],
-                onChanged: (v) => setD(() {
-                  from = v ?? from;
-                  if (to < from) to = from;
-                }),
+    final pageEnd = q.pageAyahs[ay.page].where((x) => q.ayahs[x].s == ay.s).fold<int>(g, (a, b) => b > a ? b : a);
+    final surahEnd = q.surahEndG(ay.s);
+    Navigator.of(context).push(MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (ctx) => Scaffold(
+        backgroundColor: _sheetBg(ctx),
+        appBar: AppBar(backgroundColor: _sheetBg(ctx), title: const Text('تشغيل إلى')),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Container(
+              decoration: BoxDecoration(color: _cardBg(ctx), borderRadius: BorderRadius.circular(16)),
+              child: Column(
+                children: [
+                  ListTile(
+                    title: const Text('هذه الآية فقط'),
+                    trailing: Text('${surahName(ay.s)}: ${ay.a}', style: const TextStyle(color: kGoldDeep)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _play(g);
+                    },
+                  ),
+                  const Divider(height: 1, indent: 16),
+                  ListTile(
+                    title: const Text('نهاية الصفحة'),
+                    trailing: Text('الصفحة ${ay.page}', style: const TextStyle(color: kGoldDeep)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _play(pageEnd);
+                    },
+                  ),
+                  const Divider(height: 1, indent: 16),
+                  ListTile(
+                    title: const Text('نهاية السورة'),
+                    trailing: Text(surahName(ay.s), style: const TextStyle(color: kGoldDeep)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _play(surahEnd);
+                    },
+                  ),
+                  const Divider(height: 1, indent: 16),
+                  ListTile(
+                    title: const Text('تشغيل مستمر'),
+                    trailing: const Text('∞', style: TextStyle(color: kGoldDeep, fontSize: 22)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _play(surahEnd, cont: true);
+                    },
+                  ),
+                ],
               ),
-              const Spacer(),
-              const Text('إلى '),
-              DropdownButton<int>(
-                value: to,
-                items: [for (var i = from; i <= n; i++) DropdownMenuItem(value: i, child: Text(ar(i)))],
-                onChanged: (v) => setD(() => to = v ?? to),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(6, 18, 6, 8),
+              child: Text('أو اختر الآية التي تقف عندها', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+            Container(
+              decoration: BoxDecoration(color: _cardBg(ctx), borderRadius: BorderRadius.circular(16)),
+              child: Column(
+                children: [
+                  for (var x = g; x <= surahEnd && x < g + 300; x++) ...[
+                    if (x > g) const Divider(height: 1, indent: 16),
+                    ListTile(
+                      title: Text('${surahName(ay.s)}: ${q.ayahs[x].a}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text(q.ayahs[x].text,
+                          maxLines: 1,
+                          overflow: TextOverflow.fade,
+                          softWrap: false,
+                          style: TextStyle(fontFamily: quranFont(), fontSize: 18, color: kGoldDeep, height: 1.9)),
+                      trailing: Text('${q.ayahs[x].page}', style: const TextStyle(color: Colors.grey)),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _play(x);
+                      },
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('تشغيل')),
+            ),
           ],
         ),
       ),
-    );
-    if (ok == true) {
-      AudioCtl.I.playRange(q.gOf(ay.s, from), q.gOf(ay.s, to));
-      if (mounted) Navigator.pop(context);
-    }
+    ));
+  }
+
+  void _openLibrary() {
+    Navigator.of(context).push(MaterialPageRoute(fullscreenDialog: true, builder: (_) => LibraryScreen(g: g)));
   }
 
   Future<void> _editNote() async {
@@ -145,36 +213,123 @@ class _AyahSheetState extends State<AyahSheet> {
     }
   }
 
-  void _highlight() {
+  void _more() {
     showModalBottomSheet(
       context: context,
+      showDragHandle: true,
+      backgroundColor: _sheetBg(context),
       builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('تظليل الآية', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: [
+            Container(
+              decoration: BoxDecoration(color: _cardBg(ctx), borderRadius: BorderRadius.circular(16)),
+              child: Column(
                 children: [
-                  for (var i = 0; i < kHighlightColors.length; i++)
-                    GestureDetector(
-                      onTap: () {
-                        UserStore.I.setHighlight(g, i);
-                        Navigator.pop(ctx);
-                      },
-                      child: CircleAvatar(radius: 22, backgroundColor: kHighlightColors[i]),
-                    ),
-                  GestureDetector(
+                  ListTile(
+                    leading: const Icon(Icons.record_voice_over_rounded, color: kEmerald),
+                    title: const Text('سمّع من هذه الآية'),
                     onTap: () {
-                      UserStore.I.setHighlight(g, null);
                       Navigator.pop(ctx);
+                      Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => VoiceTestScreen(fromG: g, toG: QuranData.I.surahEndG(ay.s))));
                     },
-                    child: const CircleAvatar(radius: 22, child: Icon(Icons.format_color_reset_rounded)),
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  ListTile(
+                    leading: const Icon(Icons.sticky_note_2_outlined, color: kEmerald),
+                    title: Text(UserStore.I.notes.containsKey(g) ? 'تعديل الملاحظة' : 'كتابة ملاحظة'),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _editNote();
+                    },
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  ListTile(
+                    leading: const Icon(Icons.image_outlined, color: kEmerald),
+                    title: const Text('مشاركة الآية كصورة'),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => ShareImageScreen(g: g)));
+                    },
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  ListTile(
+                    leading: const Icon(Icons.repeat_one_rounded, color: kEmerald),
+                    title: const Text('كرّر الآية للحفظ'),
+                    subtitle: Text('عدد التكرار من الإعدادات: ${ar(AppSettings.I.repeatAyah)}'),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      if (AppSettings.I.repeatAyah < 2) AppSettings.I.repeatAyah = 3;
+                      AudioCtl.I.playRange(g, g, forceAyah: true);
+                      Navigator.pop(context);
+                    },
+                  ),
+                  const Divider(height: 1, indent: 56),
+                  ListTile(
+                    leading: const Icon(Icons.lightbulb_outline_rounded, color: kEmerald),
+                    title: const Text('اسأل الذكاء الاصطناعي'),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      showSoon(context);
+                    },
                   ),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _fawasil() {
+    final q = QuranData.I;
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: _sheetBg(context),
+      builder: (ctx) => SafeArea(
+        child: ListenableBuilder(
+          listenable: UserStore.I,
+          builder: (ctx, _) => ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: [
+              const Center(child: Text('الفواصل', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18))),
+              const SizedBox(height: 4),
+              const Center(child: Text('اضغط على اللون لتضع فاصله عند هذه الآية', style: TextStyle(fontSize: 12.5))),
+              const SizedBox(height: 12),
+              Container(
+                decoration: BoxDecoration(color: _cardBg(ctx), borderRadius: BorderRadius.circular(16)),
+                child: Column(
+                  children: [
+                    for (var i = 0; i < 4; i++) ...[
+                      if (i > 0) const Divider(height: 1, indent: 56),
+                      ListTile(
+                        leading: Icon(UserStore.I.fawasil[i] != null ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                            color: kFasilColors[i], size: 30),
+                        title: Text(kFasilNames[i]),
+                        subtitle: UserStore.I.fawasil[i] == null
+                            ? null
+                            : Text(
+                                '${_date(UserStore.I.fawasil[i]![1])}  ${surahName(q.ayahs[UserStore.I.fawasil[i]![0]].s)}: ${q.ayahs[UserStore.I.fawasil[i]![0]].a}',
+                                style: const TextStyle(color: kGoldDeep)),
+                        trailing: UserStore.I.fawasil[i] == null
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.close_rounded, size: 20),
+                                onPressed: () => UserStore.I.setFasil(i, null),
+                              ),
+                        onTap: () {
+                          UserStore.I.setFasil(i, g);
+                          toast(context, 'وُضع الفاصل ${kFasilNames[i]} عند ${ay.ref}');
+                        },
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -183,320 +338,500 @@ class _AyahSheetState extends State<AyahSheet> {
     );
   }
 
+  String _date(int ms) {
+    final d = DateTime.fromMillisecondsSinceEpoch(ms);
+    return '${d.day}/${d.month}/${d.year % 100}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final dark = isDark(context);
+    final green = Theme.of(context).colorScheme.primary;
     return DraggableScrollableSheet(
-      initialChildSize: 0.75,
-      minChildSize: 0.4,
+      initialChildSize: 0.62,
+      minChildSize: 0.35,
       maxChildSize: 0.96,
       expand: false,
       builder: (ctx, sc) => Container(
         decoration: BoxDecoration(
-          color: cs.surface,
+          color: _sheetBg(context),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
         ),
-        child: ListView(
-          controller: sc,
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 30),
-          children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(3)),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Row(
+        child: ListenableBuilder(
+          listenable: Listenable.merge([UserStore.I, Reciters.I]),
+          builder: (context, _) {
+            final st = UserStore.I;
+            final q = QuranData.I;
+            final cur = st.highlights[g];
+            // the first set marker (to show like a summary)
+            int? firstColor;
+            for (var i = 0; i < 4; i++) {
+              if (st.fawasil[i] != null) {
+                firstColor = i;
+                break;
+              }
+            }
+            return ListView(
+              controller: sc,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 30),
               children: [
-                IconButton(onPressed: () => _move(-1), icon: const Icon(Icons.chevron_right_rounded), tooltip: 'الآية السابقة'),
-                Expanded(
-                  child: Text('سورة ${surahName(ay.s)} • الآية ${ar(ay.a)}',
-                      textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                ),
-                IconButton(onPressed: () => _move(1), icon: const Icon(Icons.chevron_left_rounded), tooltip: 'الآية التالية'),
-              ],
-            ),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: kGold.withValues(alpha: dark ? 0.08 : 0.10),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: kGold.withValues(alpha: 0.4)),
-              ),
-              child: Text('${ay.text} ${ayahMark(ay.a)}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontFamily: quranFont(), fontSize: 22, height: 2)),
-            ),
-            ListenableBuilder(
-              listenable: UserStore.I,
-              builder: (context, _) {
-                final note = UserStore.I.notes[g];
-                if (note == null) return const SizedBox.shrink();
-                return GestureDetector(
-                  onTap: _editNote,
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: kHighlightColors[0].withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(children: [
-                      const Icon(Icons.sticky_note_2_outlined, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(note, style: const TextStyle(height: 1.6))),
-                    ]),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 14),
-            ListenableBuilder(
-              listenable: UserStore.I,
-              builder: (context, _) {
-                final marked = UserStore.I.isAyahBookmarked(g);
-                return Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 8,
-                  runSpacing: 10,
+                Row(
                   children: [
-                    _Act(Icons.play_arrow_rounded, 'تشغيل من هنا', () {
-                      AudioCtl.I.playRange(g, QuranData.I.surahEndG(ay.s), continueAfter: true);
-                      Navigator.pop(context);
-                    }),
-                    _Act(Icons.repeat_one_rounded, 'تشغيل الآية', () {
-                      AudioCtl.I.playRange(g, g);
-                    }),
-                    _Act(Icons.linear_scale_rounded, 'من آية إلى آية', _pickRange),
-                    _Act(marked ? Icons.bookmark_rounded : Icons.bookmark_add_outlined, marked ? 'إزالة العلامة' : 'علامة', () {
-                      UserStore.I.toggleAyahBookmark(g, ay.page);
-                      toast(context, marked ? 'أُزيلت العلامة' : 'حُفظت الآية في العلامات');
-                    }),
-                    _Act(Icons.format_color_fill_rounded, 'تظليل', _highlight),
-                    _Act(Icons.copy_rounded, 'نسخ', () => _copy('﴿${ay.text}﴾ $refText', 'نُسخت الآية')),
-                    _Act(Icons.content_copy_rounded, 'نسخ بلا تشكيل',
-                        () => _copy('﴿${QuranData.I.clean[g]}﴾ [سورة ${surahName(ay.s)}: ${ay.a}]', 'نُسخت الآية بلا تشكيل')),
-                    _Act(Icons.share_rounded, 'مشاركة', () => Share.share('﴿${ay.text}﴾ $refText')),
-                    _Act(Icons.image_outlined, 'صورة', () {
-                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => ShareImageScreen(g: g)));
-                    }),
-                    _Act(Icons.record_voice_over_rounded, 'تسميع', () {
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => VoiceTestScreen(fromG: g, toG: QuranData.I.surahEndG(ay.s))));
-                    }),
-                    _Act(UserStore.I.notes.containsKey(g) ? Icons.edit_note_rounded : Icons.note_add_outlined,
-                        'ملاحظة', _editNote),
-                    _Act(Icons.lightbulb_outline_rounded, 'اسأل الذكاء الاصطناعي', () => showSoon(context)),
+                    GestureDetector(
+                      onTap: _more,
+                      child: Text('المزيد', style: TextStyle(color: green, fontWeight: FontWeight.w600, fontSize: 15)),
+                    ),
+                    Expanded(
+                      child: Text('${surahName(ay.s)}: ${ay.a}',
+                          textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: CircleAvatar(
+                        radius: 15,
+                        backgroundColor: Colors.grey.withValues(alpha: 0.22),
+                        child: const Icon(Icons.close_rounded, size: 18, color: kGoldDeep),
+                      ),
+                    ),
                   ],
-                );
-              },
-            ),
-            const SizedBox(height: 14),
-            ListenableBuilder(
-              listenable: Reciters.I,
-              builder: (context, _) => Card(
-                elevation: 0,
-                color: cs.primary.withValues(alpha: 0.07),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: ListTile(
-                  leading: const IconSquare(Icons.mic_rounded, kEmerald),
-                  title: Text('القارئ: ${Reciters.I.current.name}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: const Text('اضغط للتغيير • اضغط مطولاً لإضافة قارئ'),
-                  trailing: const Icon(Icons.chevron_left_rounded),
+                ),
+                if (st.notes[g] != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: _Tile(
+                      onTap: _editNote,
+                      padding: const EdgeInsets.all(12),
+                      child: Row(children: [
+                        const Icon(Icons.sticky_note_2_outlined, size: 20, color: kGoldDeep),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(st.notes[g]!, style: const TextStyle(height: 1.6))),
+                      ]),
+                    ),
+                  ),
+                const _Title('الفواصل'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _Tile(
+                        onTap: _fawasil,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        child: Row(
+                          children: [
+                            Icon(firstColor != null ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                                color: kFasilColors[firstColor ?? 0], size: 28),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(kFasilNames[firstColor ?? 0], style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  Text(
+                                      firstColor == null
+                                          ? 'ضع فاصلًا هنا'
+                                          : '${surahName(q.ayahs[st.fawasil[firstColor]![0]].s)}: ${q.ayahs[st.fawasil[firstColor]![0]].a}',
+                                      style: const TextStyle(color: kGoldDeep, fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _Tile(
+                        onTap: _fawasil,
+                        child: Row(
+                          children: [
+                            Icon(Icons.format_list_bulleted_rounded, color: green),
+                            const SizedBox(width: 10),
+                            Text('الكل', style: TextStyle(color: green, fontWeight: FontWeight.w600, fontSize: 16)),
+                            const Spacer(),
+                            const Icon(Icons.chevron_left_rounded, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const _Title('التلاوة'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _Tile(
+                        onTap: () => _play(q.surahEndG(ay.s), cont: true),
+                        child: Row(children: [
+                          Icon(Icons.play_arrow_rounded, color: green, size: 28),
+                          const SizedBox(width: 8),
+                          Text('تشغيل', style: TextStyle(color: green, fontWeight: FontWeight.w600, fontSize: 16)),
+                        ]),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _Tile(
+                        onTap: _playTo,
+                        child: Row(children: [
+                          Icon(Icons.play_arrow_rounded, color: green, size: 28),
+                          const SizedBox(width: 8),
+                          Text('تشغيل إلى', style: TextStyle(color: green, fontWeight: FontWeight.w600, fontSize: 16)),
+                          const Spacer(),
+                          const Icon(Icons.chevron_left_rounded, color: Colors.grey),
+                        ]),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                _Tile(
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RecitersScreen(pick: true))),
-                  onLongPress: () =>
-                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AddReciterScreen())),
+                  onLongPress: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AddReciterScreen())),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                  child: Row(children: [
+                    Icon(Icons.mic_none_rounded, color: green),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(Reciters.I.current.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: green, fontWeight: FontWeight.w600, fontSize: 16)),
+                    ),
+                    const Icon(Icons.chevron_left_rounded, color: Colors.grey),
+                  ]),
                 ),
-              ),
-            ),
-            if (QuranData.I.asbab[g] != null) ...[
-              const SizedBox(height: 14),
-              const Text('سبب النزول', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-              const Text('من «الصحيح المسند من أسباب النزول» للشيخ مقبل الوادعي رَحِمَهُ الله',
-                  style: TextStyle(fontSize: 12, color: kGoldDeep)),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: kGold.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: SelectableText(QuranData.I.asbab[g]!, style: const TextStyle(fontSize: 16, height: 1.85)),
-              ),
-            ],
-            if ((QuranData.I.similar[g] ?? const <int>[]).isNotEmpty) ...[
-              const SizedBox(height: 14),
-              const Text('آيات متشابهة', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-              const Text('آيات تشبهها في اللفظ، تفيد الحافظ في ضبط المتشابهات', style: TextStyle(fontSize: 12)),
-              const SizedBox(height: 6),
-              for (final o in QuranData.I.similar[g]!)
-                Card(
-                  elevation: 0,
-                  color: cs.primary.withValues(alpha: 0.05),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  child: ListTile(
-                    title: Text(QuranData.I.ayahs[o].text,
-                        style: TextStyle(fontFamily: quranFont(), fontSize: 18, height: 1.9)),
-                    subtitle: Text(QuranData.I.ayahs[o].ref, style: const TextStyle(color: kGoldDeep)),
-                    onTap: () {
-                      Tts.I.stop();
-                      setState(() {
-                        g = o;
-                        _load();
-                      });
+                const _Title('التفسير'),
+                _Tile(
+                  onTap: _openLibrary,
+                  child: FutureBuilder<String>(
+                    future: tf,
+                    builder: (context, snap) {
+                      if (snap.connectionState != ConnectionState.done) {
+                        return const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator());
+                      }
+                      final t = snap.hasError ? 'افتح المكتبة لقراءة التفاسير' : (snap.data ?? '');
+                      final short = t.length > 150 ? '${t.substring(0, 150)} … ' : '$t ';
+                      return Text.rich(
+                        TextSpan(children: [
+                          TextSpan(text: short),
+                          TextSpan(text: 'متابعة القراءة', style: TextStyle(color: green, fontWeight: FontWeight.w600)),
+                        ]),
+                        style: const TextStyle(fontSize: 16, height: 1.8),
+                      );
                     },
                   ),
                 ),
-            ],
-            const SizedBox(height: 14),
-            const Text('التفسير', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-            const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final t in kTafsirs)
-                    Padding(
-                      padding: const EdgeInsetsDirectional.only(end: 8),
-                      child: ChoiceChip(
-                        label: Text(t.name),
-                        selected: t.id == tafsirId,
-                        onSelected: (_) {
-                          Tts.I.stop();
-                          setState(() {
-                            tafsirId = t.id;
-                            AppSettings.I.tafsirId = t.id;
-                            _load();
-                          });
-                        },
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            FutureBuilder<String>(
-              future: tf,
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                if (snap.hasError) {
-                  return Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        const Text('هذا التفسير يحتاج إلى الإنترنت، أو حمّله من الإعدادات ليعمل بدون إنترنت.',
-                            textAlign: TextAlign.center),
-                        TextButton(onPressed: () => setState(_load), child: const Text('أعد المحاولة')),
-                      ],
-                    ),
-                  );
-                }
-                final text = snap.data ?? '';
-                final name = TafsirService.I.byId(tafsirId).name;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                const SizedBox(height: 10),
+                _Tile(
+                  onTap: _openLibrary,
+                  child: Row(children: [
+                    Icon(Icons.local_library_rounded, color: green),
+                    const SizedBox(width: 10),
+                    Text('المكتبة', style: TextStyle(color: green, fontWeight: FontWeight.w600, fontSize: 16)),
+                    const Spacer(),
+                    const Icon(Icons.chevron_left_rounded, color: Colors.grey),
+                  ]),
+                ),
+                const _Title('المشاركة'),
+                Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: cs.primary.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(16),
+                    Expanded(
+                      child: _Tile(
+                        onTap: () => _copy('﴿${ay.text}﴾ $refText', 'نُسخت الآية'),
+                        onLongPress: () => _copy('﴿${q.clean[g]}﴾ [سورة ${surahName(ay.s)}: ${ay.a}]', 'نُسخت بلا تشكيل'),
+                        child: Icon(Icons.copy_rounded, color: green),
                       ),
-                      child: SelectableText(text, style: const TextStyle(fontSize: 16.5, height: 1.85)),
                     ),
-                    const SizedBox(height: 8),
-                    ListenableBuilder(
-                      listenable: Tts.I,
-                      builder: (context, _) {
-                        final key = '$tafsirId:$g';
-                        final speaking = Tts.I.speaking && Tts.I.key == key;
-                        return Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _Act(speaking ? Icons.stop_rounded : Icons.volume_up_rounded, speaking ? 'إيقاف' : 'استمع للتفسير',
-                                () {
-                              if (speaking) {
-                                Tts.I.stop();
-                              } else {
-                                Tts.I.speak(text, key: key);
-                              }
-                            }),
-                            _Act(Icons.copy_rounded, 'نسخ التفسير', () {
-                              _copy('$name ${refText}:\n${stripTashkeel(text)}', 'نُسخ التفسير بلا تشكيل');
-                            }),
-                            _Act(Icons.share_rounded, 'مشاركة التفسير', () {
-                              Share.share('﴿${QuranData.I.clean[g]}﴾ $refText\n\n$name:\n${stripTashkeel(text)}');
-                            }),
-                            _Act(Icons.image_outlined, 'صورة مع التفسير', () {
-                              Navigator.of(context).push(MaterialPageRoute(
-                                  builder: (_) => ShareImageScreen(g: g, tafsir: stripTashkeel(text))));
-                            }),
-                          ],
-                        );
-                      },
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _Tile(
+                        onTap: () => _copy('﴿${q.clean[g]}﴾ [سورة ${surahName(ay.s)}: ${ay.a}]', 'نُسخت بلا تشكيل'),
+                        child: Icon(Icons.text_fields_rounded, color: green),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: _Tile(
+                        onTap: () => Share.share('﴿${ay.text}﴾ $refText'),
+                        onLongPress: () =>
+                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => ShareImageScreen(g: g))),
+                        child: Row(children: [
+                          Icon(Icons.ios_share_rounded, color: green),
+                          const SizedBox(width: 10),
+                          Text('مشاركة', style: TextStyle(color: green, fontWeight: FontWeight.w600, fontSize: 16)),
+                          const Spacer(),
+                          const Icon(Icons.chevron_left_rounded, color: Colors.grey),
+                        ]),
+                      ),
                     ),
                   ],
-                );
-              },
-            ),
-            if (tr != null) ...[
-              const SizedBox(height: 14),
-              const Text('الترجمة (English)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-              const SizedBox(height: 6),
-              FutureBuilder<List<String>>(
-                future: tr,
-                builder: (context, snap) => snap.hasData
-                    ? Directionality(
-                        textDirection: TextDirection.ltr,
-                        child: Text(snap.data![g], style: const TextStyle(fontSize: 15, height: 1.6)),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ],
-          ],
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(6, 6, 6, 0),
+                  child: Text('نسخ • نسخ بلا تشكيل • مشاركة (اضغط مطولًا للمشاركة كصورة)', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                ),
+                const _Title('التمييز'),
+                _Tile(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      GestureDetector(
+                        onTap: () => st.setHighlight(g, null),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: cur == null ? green : Colors.grey, width: cur == null ? 2.5 : 1.2),
+                          ),
+                          child: Icon(Icons.block_rounded, size: 20, color: Colors.grey.withValues(alpha: 0.7)),
+                        ),
+                      ),
+                      for (var i = 0; i < kHighlightColors.length; i++)
+                        GestureDetector(
+                          onTap: () => st.setHighlight(g, i),
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: kHighlightColors[i],
+                              border: Border.all(color: cur == i ? green : Colors.transparent, width: 2.5),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _Act extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  const _Act(this.icon, this.label, this.onTap);
+/// «المكتبة»: every tafsir of the ayah, one under the other.
+class LibraryScreen extends StatefulWidget {
+  final int g;
+  const LibraryScreen({super.key, required this.g});
+  @override
+  State<LibraryScreen> createState() => _LibraryScreenState();
+}
+
+class _LibraryScreenState extends State<LibraryScreen> {
+  late int g;
+  double scale = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    g = widget.g;
+  }
+
+  @override
+  void dispose() {
+    Tts.I.stop();
+    super.dispose();
+  }
+
+  void _move(int d) {
+    final n = g + d;
+    if (n < 0 || n > 6235) return;
+    Tts.I.stop();
+    setState(() => g = n);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        width: 84,
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-        decoration: BoxDecoration(
-          color: cs.primary.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: cs.primary),
-            const SizedBox(height: 4),
-            Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
+    final q = QuranData.I;
+    final ay = q.ayahs[g];
+    final green = Theme.of(context).colorScheme.primary;
+    final ref = '[سورة ${surahName(ay.s)}: ${ar(ay.a)}]';
+    final order = [...kTafsirs]..sort((a, b) => (a.id == AppSettings.I.tafsirId ? 0 : 1).compareTo(b.id == AppSettings.I.tafsirId ? 0 : 1));
+    return Scaffold(
+      backgroundColor: _sheetBg(context),
+      appBar: AppBar(backgroundColor: _sheetBg(context), title: const Text('المكتبة')),
+      body: ListView(
+        key: ValueKey(g),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Text('${ay.text} ${ayahMark(ay.a)}',
+                textAlign: TextAlign.center, style: TextStyle(fontFamily: quranFont(), fontSize: 23, height: 2.1)),
+          ),
+          if (q.asbab[g] != null) ...[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(6, 10, 6, 6),
+              child: Text('سبب النزول — الصحيح المسند (مقبل الوادعي)', style: TextStyle(color: kGoldDeep, fontSize: 15)),
+            ),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: _cardBg(context), borderRadius: BorderRadius.circular(16)),
+              child: SelectableText(q.asbab[g]!, style: TextStyle(fontSize: 17 * scale, height: 1.9)),
+            ),
           ],
+          for (final t in order) _TafsirBlock(key: ValueKey('${t.id}:$g'), t: t, g: g, scale: scale, refText: ref),
+          if ((q.similar[g] ?? const <int>[]).isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(6, 18, 6, 6),
+              child: Text('آيات متشابهة', style: TextStyle(color: kGoldDeep, fontSize: 15)),
+            ),
+            Container(
+              decoration: BoxDecoration(color: _cardBg(context), borderRadius: BorderRadius.circular(16)),
+              child: Column(
+                children: [
+                  for (final o in q.similar[g]!)
+                    ListTile(
+                      title: Text(q.ayahs[o].text, style: TextStyle(fontFamily: quranFont(), fontSize: 18, height: 1.9)),
+                      subtitle: Text(q.ayahs[o].ref, style: const TextStyle(color: kGoldDeep)),
+                      onTap: () => setState(() => g = o),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'حجم الخط',
+                onPressed: () => setState(() => scale = scale >= 1.4 ? 0.9 : scale + 0.15),
+                icon: Icon(Icons.format_size_rounded, color: green),
+              ),
+              _navBtn(Icons.chevron_right_rounded, () => _move(-1)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(12)),
+                  child: Text('${surahName(ay.s)}: ${ay.a}', style: TextStyle(color: green, fontWeight: FontWeight.w600, fontSize: 16)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _navBtn(Icons.chevron_left_rounded, () => _move(1)),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _navBtn(IconData i, VoidCallback f) => InkWell(
+        onTap: f,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 50,
+          height: 44,
+          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(12)),
+          child: Icon(i, color: Theme.of(context).colorScheme.primary),
+        ),
+      );
+}
+
+class _TafsirBlock extends StatefulWidget {
+  final TafsirSource t;
+  final int g;
+  final double scale;
+  final String refText;
+  const _TafsirBlock({super.key, required this.t, required this.g, required this.scale, required this.refText});
+  @override
+  State<_TafsirBlock> createState() => _TafsirBlockState();
+}
+
+class _TafsirBlockState extends State<_TafsirBlock> {
+  late Future<String> f;
+  bool open = false;
+
+  @override
+  void initState() {
+    super.initState();
+    f = TafsirService.I.get(widget.t.id, widget.g);
+    open = widget.t.id == AppSettings.I.tafsirId;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final green = Theme.of(context).colorScheme.primary;
+    return FutureBuilder<String>(
+      future: f,
+      builder: (context, snap) {
+        final text = snap.data ?? '';
+        final long = text.length > 420;
+        final shown = (!open && long) ? '${text.substring(0, 420)} …' : text;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 16, 0, 2),
+              child: Row(
+                children: [
+                  Expanded(child: Text(widget.t.name, style: const TextStyle(color: kGoldDeep, fontSize: 15))),
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_horiz_rounded, color: green),
+                    onSelected: (v) {
+                      final plain = stripTashkeel(text);
+                      if (v == 'copy') {
+                        Clipboard.setData(ClipboardData(text: '${widget.t.name} ${widget.refText}:\n$plain'));
+                        toast(context, 'نُسخ التفسير');
+                      } else if (v == 'share') {
+                        Share.share('﴿${QuranData.I.clean[widget.g]}﴾ ${widget.refText}\n\n${widget.t.name}:\n$plain');
+                      } else if (v == 'listen') {
+                        Tts.I.speak(text, key: '${widget.t.id}:${widget.g}');
+                      } else if (v == 'stop') {
+                        Tts.I.stop();
+                      } else if (v == 'img') {
+                        Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => ShareImageScreen(g: widget.g, tafsir: plain)));
+                      } else if (v == 'def') {
+                        AppSettings.I.tafsirId = widget.t.id;
+                        toast(context, 'صار ${widget.t.name} هو التفسير الأول');
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'listen', child: Text('استمع للتفسير')),
+                      PopupMenuItem(value: 'stop', child: Text('إيقاف الاستماع')),
+                      PopupMenuItem(value: 'copy', child: Text('نسخ التفسير')),
+                      PopupMenuItem(value: 'share', child: Text('مشاركة التفسير')),
+                      PopupMenuItem(value: 'img', child: Text('صورة مع التفسير')),
+                      PopupMenuItem(value: 'def', child: Text('اجعله التفسير الأول')),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: _cardBg(context), borderRadius: BorderRadius.circular(16)),
+              child: snap.connectionState != ConnectionState.done
+                  ? const LinearProgressIndicator()
+                  : snap.hasError
+                      ? const Text('هذا التفسير يحتاج إلى الإنترنت.')
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SelectableText(shown, style: TextStyle(fontSize: 17 * widget.scale, height: 1.9)),
+                            if (long)
+                              Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: TextButton(
+                                  onPressed: () => setState(() => open = !open),
+                                  child: Text(open ? 'إخفاء' : 'متابعة القراءة'),
+                                ),
+                              ),
+                          ],
+                        ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

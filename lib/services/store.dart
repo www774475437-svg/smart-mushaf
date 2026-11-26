@@ -39,6 +39,9 @@ class UserStore extends ChangeNotifier {
   int khatmaStart = 0;
   Set<int> khatmaDone = {};
   Map<int, String> notes = {};
+
+  /// Four coloured place-markers (الفواصل): colour -> [ayah index, time].
+  Map<int, List<int>> fawasil = {};
   Map<String, int> dayPages = {};
   Set<int> _todayPages = {};
   String _todayKey = '';
@@ -60,6 +63,8 @@ class UserStore extends ChangeNotifier {
         khatmaDays = m['kd'] as int? ?? 0;
         khatmaStart = m['ks'] as int? ?? 0;
         khatmaDone = Set<int>.from((m['kdn'] as List? ?? []).map((e) => e as int));
+        final fw = m['fw'] as Map<String, dynamic>? ?? {};
+        fawasil = fw.map((k, v) => MapEntry(int.parse(k), List<int>.from(v as List)));
         final n = m['n'] as Map<String, dynamic>? ?? {};
         notes = n.map((k, v) => MapEntry(int.parse(k), v as String));
         final dp = m['dp'] as Map<String, dynamic>? ?? {};
@@ -82,6 +87,7 @@ class UserStore extends ChangeNotifier {
           'ks': khatmaStart,
           'kdn': khatmaDone.toList(),
           'n': notes.map((k, v) => MapEntry(k.toString(), v)),
+          'fw': fawasil.map((k, v) => MapEntry(k.toString(), v)),
           'dp': dayPages,
           'tk': _todayKey,
           'tp': _todayPages.toList(),
@@ -121,6 +127,15 @@ class UserStore extends ChangeNotifier {
       d = d.subtract(const Duration(days: 1));
     }
     return n;
+  }
+
+  void setFasil(int color, int? g) {
+    if (g == null) {
+      fawasil.remove(color);
+    } else {
+      fawasil[color] = [g, DateTime.now().millisecondsSinceEpoch];
+    }
+    _save();
   }
 
   // Notes
