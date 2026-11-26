@@ -1,0 +1,87 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Cache Quran data and fonts
+        uses: actions/cache@v4
+        with:
+          path: |
+            assets/data
+            assets/fonts
+          key: quran-data-${{ hashFiles('tool/build_data.py') }}
+
+      - name: Download Quran data and fonts
+        run: python3 tool/build_data.py
+
+      - name: Signing key (kept in the private build cache)
+        id: keycache
+        uses: actions/cache@v4
+        with:
+          path: ~/.mushaf-key
+          key: mushaf-signing-key-v1
+
+      - name: Create signing key if missing
+        if: steps.keycache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.mushaf-key
+          PASS=$(openssl rand -hex 16)
+          echo -n "$PASS" > ~/.mushaf-key/pass
+          keytool -genkeypair -keystore ~/.mushaf-key/release.jks -storepass "$PASS" -keypass "$PASS" \
+            -alias mushaf -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Abu Abdulrahman Al-Athari, O=Smart Mushaf, C=US"
+
+      - name: Create Android project
+        run: flutter create --org com.abualathari --project-name smart_mushaf --platforms android .
+
+      - name: Patch Android project
+        run: |
+          export KEY_PATH=$HOME/.mushaf-key/release.jks
+          export KEY_PASS=$(cat ~/.mushaf-key/pass)
+          python3 tool/patch_android.py > /dev/null
+          echo "patched"
+
+      - run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }}
+
+      - name: Name the APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk smart-mushaf-1.0.${{ github.run_number }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smart-mushaf-apk
+          path: smart-mushaf-*.apk
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: المصحف الذكي 1.0.${{ github.run_number }}
+          files: smart-mushaf-*.apk
+          make_latest: true
