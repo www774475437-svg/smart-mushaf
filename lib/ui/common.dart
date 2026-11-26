@@ -241,10 +241,12 @@ const Map<String, String> kQuranFonts = {
 
 class AppFonts {
   static List<String> available = ['AmiriQuran'];
+  static bool surahNames = false;
   static Future<void> init() async {
     try {
       final l = List<String>.from(jsonDecode(await rootBundle.loadString('assets/data/fonts.json')) as List);
       available = [for (final f in kQuranFonts.keys) if (f == 'AmiriQuran' || l.contains(f)) f];
+      surahNames = l.contains('SurahNames');
     } catch (_) {}
   }
 }

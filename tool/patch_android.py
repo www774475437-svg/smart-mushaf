@@ -54,10 +54,26 @@ perms = (
     '    <uses-permission android:name="android.permission.INTERNET"/>\n'
     '    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n'
     '    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n'
+    '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n'
+    '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>\n'
 )
 if 'android.permission.INTERNET' not in m:
     m = re.sub(r'(<manifest[^>]*>)', r'\1\n' + perms, m, count=1)
 m = re.sub(r'android:label="[^"]*"', 'android:label="المصحف الذكي"', m, count=1)
+# background playback with lock-screen controls (just_audio_background)
+m = m.replace('android:name=".MainActivity"', 'android:name="com.ryanheise.audioservice.AudioServiceActivity"')
+if 'com.ryanheise.audioservice.AudioService"' not in m:
+    svc = (
+        '        <service android:name="com.ryanheise.audioservice.AudioService"\n'
+        '            android:foregroundServiceType="mediaPlayback" android:exported="true">\n'
+        '            <intent-filter><action android:name="android.media.browse.MediaBrowserService"/></intent-filter>\n'
+        '        </service>\n'
+        '        <receiver android:name="com.ryanheise.audioservice.MediaButtonReceiver" android:exported="true">\n'
+        '            <intent-filter><action android:name="android.intent.action.MEDIA_BUTTON"/></intent-filter>\n'
+        '        </receiver>\n'
+    )
+    m = m.replace('</application>', svc + '    </application>', 1)
+
 extra = (
     '        <intent><action android:name="android.speech.RecognitionService"/></intent>\n'
     '        <intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>\n'

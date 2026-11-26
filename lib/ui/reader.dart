@@ -237,7 +237,10 @@ class _MushafScreenState extends State<MushafScreen> {
       controller: _pc,
       itemCount: 604,
       onPageChanged: (i) => _setPage(i + 1),
-      itemBuilder: (_, i) => MushafPage(page: i + 1, expand: true, selectedG: selectedG, onLongPress: _openAyah),
+      allowImplicitScrolling: true,
+      physics: const PageScrollPhysics(parent: BouncingScrollPhysics()),
+      itemBuilder: (_, i) => RepaintBoundary(
+          child: MushafPage(page: i + 1, expand: true, selectedG: selectedG, onLongPress: _openAyah)),
     );
   }
 
@@ -739,7 +742,7 @@ class AudioBar extends StatelessWidget {
                   visualDensity: VisualDensity.compact,
                   tooltip: 'السرعة',
                   onPressed: () {
-                    const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
+                    const speeds = [1.0, 1.25, 1.5];
                     final i = speeds.indexOf(AppSettings.I.speed);
                     a.setSpeed(speeds[(i + 1) % speeds.length]);
                   },

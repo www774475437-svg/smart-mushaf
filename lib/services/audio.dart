@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../data/quran.dart';
 import '../data/reciters.dart';
+import '../data/surah_names.dart';
 import 'settings.dart';
 
 class AudioCtl extends ChangeNotifier {
@@ -83,9 +85,13 @@ class AudioCtl extends ChangeNotifier {
   String localAyah(Reciter r, int s, int a) => '${_dir(r)}/${pad3(s)}${pad3(a)}.mp3';
   String localSurah(Reciter r, int s) => '${_dir(r)}/${pad3(s)}.mp3';
 
-  AudioSource _src(String local, String url) {
-    if (_docs.isNotEmpty && File(local).existsSync()) return AudioSource.file(local);
-    return AudioSource.uri(Uri.parse(url));
+  int _tagN = 0;
+
+  /// Every source carries a title so it shows on the lock screen and in the notification.
+  AudioSource _src(String local, String url, String title, String artist) {
+    final tag = MediaItem(id: '${_tagN++}:$url', title: title, artist: artist, album: 'المصحف الذكي');
+    if (_docs.isNotEmpty && File(local).existsSync()) return AudioSource.file(local, tag: tag);
+    return AudioSource.uri(Uri.parse(url), tag: tag);
   }
 
   bool isSurahDownloaded(Reciter r, int s) {
@@ -135,11 +141,11 @@ class AudioCtl extends ChangeNotifier {
         final ay = q.ayahs[g];
         if (ay.a == 1 && ay.s != 1 && ay.s != 9 && k == 0) {
           // basmala before the surah
-          children.add(_src(localAyah(r, 1, 1), r.ayahUrl(1, 1)));
+          children.add(_src(localAyah(r, 1, 1), r.ayahUrl(1, 1), '${surahName(ay.s)}: ${ay.a}', r.name));
           queue.add(g);
         }
         for (var i = 0; i < rep; i++) {
-          children.add(_src(localAyah(r, ay.s, ay.a), r.ayahUrl(ay.s, ay.a)));
+          children.add(_src(localAyah(r, ay.s, ay.a), r.ayahUrl(ay.s, ay.a), '${surahName(ay.s)}: ${ay.a}', r.name));
           queue.add(g);
         }
       }
@@ -192,7 +198,7 @@ class AudioCtl extends ChangeNotifier {
       await player.stop();
       await player.setLoopMode(AppSettings.I.repeatRange == 0 ? LoopMode.one : LoopMode.off);
       await player.setSpeed(AppSettings.I.speed);
-      await player.setAudioSource(_src(localSurah(r, s), r.surahUrl(s)));
+      await player.setAudioSource(_src(localSurah(r, s), r.surahUrl(s), 'سورة ${surahName(s)}', r.name));
       player.play();
     } catch (e) {
       error = 'تعذّر تشغيل السورة، تأكد من الاتصال بالإنترنت';
@@ -292,7 +298,7 @@ class AudioCtl extends ChangeNotifier {
       _timing = null;
       await player.setLoopMode(st.repeatRange == 0 && whole && a1 <= 1 ? LoopMode.one : LoopMode.off);
       await player.setSpeed(st.speed);
-      await player.setAudioSource(_src(localSurah(r, s), r.surahUrl(s)),
+      await player.setAudioSource(_src(localSurah(r, s), r.surahUrl(s), 'سورة ${surahName(s)}', r.name),
           initialPosition: Duration(milliseconds: from));
       _timedSurah = s;
       _stopAtMs = whole ? null : endOf(a2);
@@ -366,7 +372,8 @@ class AudioCtl extends ChangeNotifier {
       await player.stop();
       await player.setLoopMode(LoopMode.off);
       await player.setSpeed(AppSettings.I.speed);
-      await player.setAudioSource(AudioSource.uri(Uri.parse(url.replaceFirst('http://', 'https://'))));
+      await player.setAudioSource(AudioSource.uri(Uri.parse(url.replaceFirst('http://', 'https://')),
+          tag: MediaItem(id: '${_tagN++}:$url', title: sub, artist: title, album: 'المصحف الذكي')));
       player.play();
     } catch (e) {
       error = 'تعذّر تشغيل التسجيل، تأكد من الاتصال بالإنترنت';

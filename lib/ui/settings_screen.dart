@@ -144,13 +144,13 @@ class SettingsScreen extends StatelessWidget {
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AddReciterScreen())),
                 ),
                 _stepper(context, Icons.speed_rounded, const Color(0xFF1565C0), 'سرعة التلاوة', '${st.speed}×', () {
-                  const s = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+                  const s = [1.0, 1.25, 1.5];
                   final i = s.indexOf(st.speed);
                   if (i > 0) st.speed = s[i - 1];
                 }, () {
-                  const s = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+                  const s = [1.0, 1.25, 1.5];
                   final i = s.indexOf(st.speed);
-                  if (i < s.length - 1) st.speed = s[i < 0 ? 2 : i + 1];
+                  if (i < s.length - 1) st.speed = s[i < 0 ? 0 : i + 1];
                 }),
                 _stepper(context, Icons.repeat_one_rounded, const Color(0xFF2E7D32), 'تكرار كل آية',
                     '${ar(st.repeatAyah)} ${st.repeatAyah == 1 ? 'مرة' : 'مرات'}', () {

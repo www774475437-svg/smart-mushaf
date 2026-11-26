@@ -446,6 +446,43 @@ for fname, urls in FONT_SOURCES.items():
     else:
         shutil.copy(os.path.join(FONTS, 'AmiriQuran-Regular.ttf'), p)
         print('WARNING: font', fname, 'replaced by Amiri Quran')
+# calligraphic surah names (one glyph per surah)
+sn = os.path.join(FONTS, 'SurahNames.ttf')
+sn_ok = prev is not None and 'SurahNames' in prev and os.path.exists(sn)
+if not sn_ok:
+    base = 'https://raw.githubusercontent.com/quran/quran.com-frontend-next/%s/public/fonts/quran/surah-names/v1/sura_names.%s'
+    for br in ('production', 'master'):
+        for ext in ('ttf', 'woff2', 'woff'):
+            if sn_ok:
+                break
+            try:
+                b = fetch(base % (br, ext), tries=2, quiet=True)
+                if ext == 'ttf' and is_font(b):
+                    open(sn, 'wb').write(b)
+                    sn_ok = True
+                elif ext != 'ttf' and len(b) > 5000:
+                    import io
+                    import subprocess
+                    import sys
+                    subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', 'fonttools', 'brotli',
+                                    '--break-system-packages'], check=False)
+                    from fontTools.ttLib import TTFont
+                    f = TTFont(io.BytesIO(b))
+                    f.flavor = None
+                    f.save(sn)
+                    sn_ok = os.path.getsize(sn) > 5000
+                    print('surah names glyphs', len(f.getGlyphOrder()), [g for g in f.getGlyphOrder()][:40])
+                    try:
+                        print('ligatures sample', str(f['GSUB'].table.LookupList.Lookup[0].SubTable[0].ligatures)[:300])
+                    except Exception as e:  # noqa
+                        print('no gsub info', e)
+            except Exception as e:  # noqa
+                print('surah names font', br, ext, 'failed', e)
+if sn_ok:
+    fonts_ok.append('SurahNames')
+else:
+    shutil.copy(os.path.join(FONTS, 'AmiriQuran-Regular.ttf'), sn)
+    print('WARNING: surah names font missing')
 json.dump(fonts_ok, open(marker, 'w'))
 shutil.copy(marker, os.path.join(OUT, 'fonts.json'))
 print('fonts', fonts_ok)

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 
 import 'data/layout.dart';
 import 'data/quran.dart';
@@ -20,6 +21,13 @@ Future<void> main() async {
   await AppSettings.I.init();
   await UserStore.I.init();
   await Reciters.I.init();
+  try {
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'com.abualathari.smart_mushaf.audio',
+      androidNotificationChannelName: 'التلاوة',
+      androidNotificationOngoing: true,
+    );
+  } catch (_) {}
   await AudioCtl.I.init();
   await TafsirService.I.init();
   await AppFonts.init();

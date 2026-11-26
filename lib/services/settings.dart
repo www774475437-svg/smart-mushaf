@@ -41,7 +41,10 @@ class AppSettings extends ChangeNotifier {
   String get riwaya => _p.getString('riwaya') ?? 'hafs';
   set riwaya(String v) => _set('riwaya', v);
 
-  double get speed => _p.getDouble('speed') ?? 1.0;
+  double get speed {
+    final v = _p.getDouble('speed') ?? 1.0;
+    return (v == 1.25 || v == 1.5) ? v : 1.0;
+  }
   set speed(double v) => _set('speed', v);
 
   int get repeatAyah => _p.getInt('repeatAyah') ?? 1;

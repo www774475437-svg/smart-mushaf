@@ -265,8 +265,22 @@ class SurahFrame extends StatelessWidget {
             fit: BoxFit.scaleDown,
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: height * 0.08),
-              child: Text('سُورَةُ ${surahName(s)}',
-                  style: TextStyle(fontFamily: quranFont(), fontSize: height * 0.5, color: col.text, height: 1.3)),
+              child: AppFonts.surahNames
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      textDirection: TextDirection.rtl,
+                      children: [
+                        Text('surah',
+                            textDirection: TextDirection.ltr,
+                            style: TextStyle(fontFamily: 'SurahNames', fontSize: height * 0.62, color: col.text, height: 1.1)),
+                        Text(s.toString().padLeft(3, '0'),
+                            textDirection: TextDirection.ltr,
+                            style: TextStyle(fontFamily: 'SurahNames', fontSize: height * 0.62, color: col.text, height: 1.1)),
+                      ],
+                    )
+                  : Text('سُورَةُ ${surahName(s)}',
+                      style: TextStyle(fontFamily: quranFont(), fontSize: height * 0.5, color: col.text, height: 1.3)),
+
             ),
           ),
         ),
