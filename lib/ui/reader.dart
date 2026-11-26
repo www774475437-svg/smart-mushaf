@@ -100,10 +100,14 @@ class _MushafScreenState extends State<MushafScreen> {
   void _onAudio() {
     final g = AudioCtl.I.currentG;
     if (g == null || g == _lastAudioG) return;
+    final prev = _lastAudioG;
     _lastAudioG = g;
     if (!AppSettings.I.followAudio) return;
     final p = QuranData.I.ayahs[g].page;
-    if (p != page) _goTo(p);
+    // Turn the page with the reciter only while the reader is still on the page being recited.
+    // If he moved to another page to look at something, leave him there (the return button brings him back).
+    final wasOn = prev == null || QuranData.I.ayahs[prev].page == page;
+    if (p != page && wasOn) _goTo(p);
   }
 
   void _goTo(int p, {bool animate = true}) {
@@ -347,7 +351,14 @@ class _MushafScreenState extends State<MushafScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (autoOn) _autoPill(col),
-            AudioBar(page: page, onPlay: _playPage),
+            AudioBar(
+              page: page,
+              onPlay: _playPage,
+              onLocate: () {
+                final g = AudioCtl.I.currentG;
+                if (g != null) _goTo(QuranData.I.ayahs[g].page);
+              },
+            ),
             const SizedBox(height: 8),
             Container(
               decoration: BoxDecoration(
@@ -655,7 +666,10 @@ class _SurahBanner extends StatelessWidget {
 class AudioBar extends StatelessWidget {
   final int? page;
   final VoidCallback? onPlay;
-  const AudioBar({super.key, this.page, this.onPlay});
+
+  /// Jumps back to the page of the ayah being recited.
+  final VoidCallback? onLocate;
+  const AudioBar({super.key, this.page, this.onPlay, this.onLocate});
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -683,7 +697,7 @@ class AudioBar extends StatelessWidget {
           );
         }
         if (!a.active && onPlay == null) return const SizedBox.shrink();
-        if (a.active) return _BigPlayer(page: page, green: green, bg: bg);
+        if (a.active) return _BigPlayer(page: page, green: green, bg: bg, onLocate: onLocate);
         final q = QuranData.I;
         final r = a.playingReciter ?? Reciters.I.current;
         String title = a.active ? (a.customTitle ?? r.name) : Reciters.I.current.name;
@@ -851,7 +865,8 @@ String _mmss(Duration d) {
 class _BigPlayer extends StatelessWidget {
   final int? page;
   final Color green, bg;
-  const _BigPlayer({this.page, required this.green, required this.bg});
+  final VoidCallback? onLocate;
+  const _BigPlayer({this.page, required this.green, required this.bg, this.onLocate});
   @override
   Widget build(BuildContext context) {
     final a = AudioCtl.I;
@@ -911,7 +926,20 @@ class _BigPlayer extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 26),
+              if (onLocate != null &&
+                  a.currentG != null &&
+                  page != null &&
+                  q.ayahs[a.currentG!].page != page)
+                GestureDetector(
+                  onTap: onLocate,
+                  child: CircleAvatar(
+                    radius: 13,
+                    backgroundColor: green,
+                    child: const Icon(Icons.replay_rounded, size: 17, color: Colors.white),
+                  ),
+                )
+              else
+                const SizedBox(width: 26),
             ],
           ),
           StreamBuilder<Duration>(
