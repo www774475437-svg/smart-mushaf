@@ -118,6 +118,33 @@ class _AyahSheetState extends State<AyahSheet> {
     }
   }
 
+  Future<void> _editNote() async {
+    final c = TextEditingController(text: UserStore.I.notes[g] ?? '');
+    final res = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('ملاحظة على ${ay.ref}', style: const TextStyle(fontSize: 16)),
+        content: TextField(
+          controller: c,
+          autofocus: true,
+          minLines: 3,
+          maxLines: 8,
+          decoration: const InputDecoration(hintText: 'اكتب فائدة أو تدبّرًا…', border: OutlineInputBorder()),
+        ),
+        actions: [
+          if (UserStore.I.notes.containsKey(g))
+            TextButton(onPressed: () => Navigator.pop(ctx, ''), child: const Text('حذف', style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, c.text), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    if (res != null) {
+      UserStore.I.setNote(g, res);
+      if (mounted) toast(context, res.trim().isEmpty ? 'حُذفت الملاحظة' : 'حُفظت الملاحظة');
+    }
+  }
+
   void _highlight() {
     showModalBottomSheet(
       context: context,
@@ -201,7 +228,30 @@ class _AyahSheetState extends State<AyahSheet> {
               ),
               child: Text('${ay.text} ﴿${ar(ay.a)}﴾',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 22, height: 2)),
+                  style: TextStyle(fontFamily: quranFont(), fontSize: 22, height: 2)),
+            ),
+            ListenableBuilder(
+              listenable: UserStore.I,
+              builder: (context, _) {
+                final note = UserStore.I.notes[g];
+                if (note == null) return const SizedBox.shrink();
+                return GestureDetector(
+                  onTap: _editNote,
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: kHighlightColors[0].withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.sticky_note_2_outlined, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(note, style: const TextStyle(height: 1.6))),
+                    ]),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 14),
             ListenableBuilder(
@@ -237,6 +287,9 @@ class _AyahSheetState extends State<AyahSheet> {
                       Navigator.of(context).push(MaterialPageRoute(
                           builder: (_) => VoiceTestScreen(fromG: g, toG: QuranData.I.surahEndG(ay.s))));
                     }),
+                    _Act(UserStore.I.notes.containsKey(g) ? Icons.edit_note_rounded : Icons.note_add_outlined,
+                        'ملاحظة', _editNote),
+                    _Act(Icons.lightbulb_outline_rounded, 'اسأل الذكاء الاصطناعي', () => showSoon(context)),
                   ],
                 );
               },

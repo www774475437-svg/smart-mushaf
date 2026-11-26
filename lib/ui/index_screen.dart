@@ -125,7 +125,7 @@ class _IndexScreenState extends State<IndexScreen> {
               builder: (context, _) {
                 final bs = UserStore.I.bookmarks;
                 final hl = UserStore.I.highlights.keys.toList()..sort();
-                if (bs.isEmpty && hl.isEmpty) {
+                if (bs.isEmpty && hl.isEmpty && UserStore.I.notes.isEmpty) {
                   return const Center(
                     child: Padding(
                       padding: EdgeInsets.all(30),
@@ -150,6 +150,18 @@ class _IndexScreenState extends State<IndexScreen> {
                           icon: const Icon(Icons.delete_outline_rounded),
                           onPressed: () => UserStore.I.removeBookmark(b),
                         ),
+                      ),
+                    if (UserStore.I.notes.isNotEmpty)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
+                        child: Text('ملاحظاتي', style: TextStyle(fontWeight: FontWeight.w700)),
+                      ),
+                    for (final e in UserStore.I.notes.entries)
+                      ListTile(
+                        leading: const Icon(Icons.sticky_note_2_outlined, color: kGoldDeep),
+                        title: Text(q.ayahs[e.key].ref),
+                        subtitle: Text(e.value, maxLines: 2, overflow: TextOverflow.ellipsis),
+                        onTap: () => MushafScreen.open(context, q.ayahs[e.key].page, flashG: e.key),
                       ),
                     if (hl.isNotEmpty)
                       const Padding(

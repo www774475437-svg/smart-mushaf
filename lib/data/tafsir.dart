@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -10,23 +11,24 @@ import 'quran.dart';
 
 class TafsirSource {
   final String id, name, author;
-  final String? asset;
   final String? cloud;
   final int? qcom;
-  const TafsirSource(this.id, this.name, this.author, {this.asset, this.cloud, this.qcom});
-  bool get bundled => asset != null;
+  const TafsirSource(this.id, this.name, this.author, {this.cloud, this.qcom});
+  bool get bundled => TafsirService.I.bundledIds.contains(id);
 }
 
 const List<TafsirSource> kTafsirs = [
-  TafsirSource('muyassar', 'التفسير الميسر', 'مجمع الملك فهد', asset: 'assets/data/muyassar.json'),
-  TafsirSource('saadi', 'تفسير السعدي', 'عبد الرحمن السعدي', qcom: 91),
-  TafsirSource('ibnkathir', 'تفسير ابن كثير', 'ابن كثير', qcom: 14),
-  TafsirSource('tabari', 'تفسير الطبري', 'ابن جرير الطبري', qcom: 15),
-  TafsirSource('baghawi', 'تفسير البغوي', 'البغوي', cloud: 'ar.baghawi', qcom: 94),
-  TafsirSource('qurtubi', 'تفسير القرطبي', 'القرطبي', cloud: 'ar.qurtubi', qcom: 90),
-  TafsirSource('jalalayn', 'تفسير الجلالين', 'المحلي والسيوطي', asset: 'assets/data/jalalayn.json'),
+  TafsirSource('muyassar', 'التفسير الميسر', 'نخبة من العلماء - مجمع الملك فهد', cloud: 'ar.muyassar', qcom: 16),
+  TafsirSource('saadi', 'تفسير السعدي', 'عبد الرحمن بن ناصر السعدي', qcom: 91),
+  TafsirSource('ibnkathir', 'تفسير ابن كثير', 'إسماعيل بن عمر بن كثير', qcom: 14),
+  TafsirSource('tabari', 'تفسير الطبري', 'محمد بن جرير الطبري', qcom: 15),
+  TafsirSource('baghawi', 'تفسير البغوي', 'الحسين بن مسعود البغوي', cloud: 'ar.baghawi', qcom: 94),
+  TafsirSource('qurtubi', 'تفسير القرطبي', 'محمد بن أحمد القرطبي', cloud: 'ar.qurtubi', qcom: 90),
+  TafsirSource('jalalayn', 'تفسير الجلالين', 'المحلي والسيوطي', cloud: 'ar.jalalayn'),
   TafsirSource('waseet', 'التفسير الوسيط', 'محمد سيد طنطاوي', cloud: 'ar.waseet', qcom: 93),
 ];
+
+const String kGroupedNote = 'تفسير هذه الآية مذكور مع الآيات التي قبلها في هذا التفسير.';
 
 String cleanHtml(String s) {
   var t = s
@@ -43,18 +45,34 @@ String cleanHtml(String s) {
   return t.trim();
 }
 
+List<String> _decodeGz(Uint8List b) {
+  final bytes = GZipDecoder().decodeBytes(b);
+  return List<String>.from(jsonDecode(utf8.decode(bytes)) as List);
+}
+
 class TafsirService {
   TafsirService._();
   static final TafsirService I = TafsirService._();
 
+  Set<String> bundledIds = {};
   final Map<String, List<String>> _full = {};
   final Map<String, Map<int, String>> _part = {};
   final Map<String, List<String>> _normFull = {};
   String _docs = '';
 
+  Future<void> init() async {
+    try {
+      final raw = await rootBundle.loadString('assets/data/tafsirs.json');
+      bundledIds = Set<String>.from(jsonDecode(raw) as List);
+    } catch (_) {
+      bundledIds = {};
+    }
+  }
+
   TafsirSource byId(String id) => kTafsirs.firstWhere((t) => t.id == id, orElse: () => kTafsirs.first);
 
   Future<String> _dir() async {
+    if (kIsWeb) throw UnsupportedError('web');
     if (_docs.isEmpty) _docs = (await getApplicationDocumentsDirectory()).path;
     return _docs;
   }
@@ -63,26 +81,32 @@ class TafsirService {
   Future<File> _partFile(TafsirSource t) async => File('${await _dir()}/tafsir_${t.id}_part.json');
 
   Future<bool> isAvailableOffline(TafsirSource t) async {
-    if (t.bundled) return true;
-    return (await _fullFile(t)).exists();
+    if (t.bundled || _full.containsKey(t.id)) return true;
+    try {
+      return await (await _fullFile(t)).exists();
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<List<String>?> fullList(TafsirSource t) async {
     if (_full.containsKey(t.id)) return _full[t.id];
-    if (t.asset != null) {
-      final raw = await rootBundle.loadString(t.asset!);
-      final l = List<String>.from((await compute(decodeJson, raw)) as List);
-      _full[t.id] = l;
-      return l;
-    }
-    final f = await _fullFile(t);
-    if (await f.exists()) {
+    if (t.bundled) {
       try {
-        final l = List<String>.from((await compute(decodeJson, await f.readAsString())) as List);
+        final data = await rootBundle.load('assets/data/tafsir_${t.id}.json.gz');
+        final l = await compute(_decodeGz, data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
         _full[t.id] = l;
         return l;
       } catch (_) {}
     }
+    try {
+      final f = await _fullFile(t);
+      if (await f.exists()) {
+        final l = List<String>.from((await compute(decodeJson, await f.readAsString())) as List);
+        _full[t.id] = l;
+        return l;
+      }
+    } catch (_) {}
     return null;
   }
 
@@ -108,10 +132,26 @@ class TafsirService {
     } catch (_) {}
   }
 
+  /// When a tafsir explains several ayahs together, the later ones are empty:
+  /// show the text of the ayah the group starts with.
+  String _resolve(List<String> full, int g) {
+    final t = full[g];
+    if (t.trim().isNotEmpty && t != kGroupedNote) return t;
+    final s = QuranData.I.ayahs[g].s;
+    for (var k = g - 1; k >= 0 && k >= g - 40; k--) {
+      if (QuranData.I.ayahs[k].s != s) break;
+      final p = full[k];
+      if (p.trim().isNotEmpty && p != kGroupedNote) {
+        return '(هذه الآية مفسَّرة مع الآية ${QuranData.I.ayahs[k].a})\n\n$p';
+      }
+    }
+    return kGroupedNote;
+  }
+
   Future<String> get(String id, int g) async {
     final t = byId(id);
     final full = await fullList(t);
-    if (full != null && g < full.length) return full[g];
+    if (full != null && g < full.length) return _resolve(full, g);
     final part = await _loadPart(t);
     if (part.containsKey(g)) return part[g]!;
     final ay = QuranData.I.ayahs[g];
@@ -139,18 +179,14 @@ class TafsirService {
         }
       } catch (_) {}
     }
-    if (text == null) {
-      throw Exception('offline');
-    }
-    if (text.isEmpty) {
-      text = 'تفسير هذه الآية مذكور مع الآيات التي قبلها في هذا التفسير.';
-    }
+    if (text == null) throw Exception('offline');
+    if (text.isEmpty) text = kGroupedNote;
     part[g] = text;
     await _savePart(t);
     return text;
   }
 
-  /// Downloads a whole tafsir so it works without internet.
+  /// Downloads a whole tafsir so it works without internet (for ones not inside the app).
   Future<void> download(TafsirSource t, void Function(double p) onProgress) async {
     if (t.bundled) return;
     final out = List<String>.filled(6236, '');
@@ -200,19 +236,20 @@ class TafsirService {
         onProgress(ch / 114);
       }
     }
-    for (var i = 0; i < out.length; i++) {
-      if (out[i].isEmpty) out[i] = 'تفسير هذه الآية مذكور مع الآيات التي قبلها في هذا التفسير.';
-    }
-    final f = await _fullFile(t);
-    await f.writeAsString(jsonEncode(out));
     _full[t.id] = out;
+    try {
+      final f = await _fullFile(t);
+      await f.writeAsString(jsonEncode(out));
+    } catch (_) {}
     onProgress(1);
   }
 
   Future<void> remove(TafsirSource t) async {
     if (t.bundled) return;
-    final f = await _fullFile(t);
-    if (await f.exists()) await f.delete();
+    try {
+      final f = await _fullFile(t);
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
     _full.remove(t.id);
     _normFull.remove(t.id);
   }
@@ -220,7 +257,7 @@ class TafsirService {
   Future<List<int>> search(TafsirSource t, String query, {int limit = 300}) async {
     final full = await fullList(t);
     if (full == null) return [];
-    final n = _normFull[t.id] ??= full.map(normalizeAr).toList();
+    final n = _normFull[t.id] ??= await compute(_normAll, full);
     final q = normalizeAr(query);
     if (q.isEmpty) return [];
     final out = <int>[];
@@ -233,3 +270,5 @@ class TafsirService {
     return out;
   }
 }
+
+List<String> _normAll(List<String> l) => l.map(normalizeAr).toList();

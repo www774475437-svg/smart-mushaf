@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'data/quran.dart';
 import 'data/reciters.dart';
+import 'data/tafsir.dart';
 import 'services/audio.dart';
 import 'services/settings.dart';
 import 'services/store.dart';
@@ -18,6 +19,8 @@ Future<void> main() async {
   await UserStore.I.init();
   await Reciters.I.init();
   await AudioCtl.I.init();
+  await TafsirService.I.init();
+  await AppFonts.init();
   runApp(const SmartMushafApp());
 }
 

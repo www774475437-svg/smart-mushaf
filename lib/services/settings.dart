@@ -63,6 +63,9 @@ class AppSettings extends ChangeNotifier {
   bool get showPageFrame => _p.getBool('showPageFrame') ?? true;
   set showPageFrame(bool v) => _set('showPageFrame', v);
 
+  String get quranFont => _p.getString('quranFont') ?? 'AmiriQuran';
+  set quranFont(String v) => _set('quranFont', v);
+
   double get ttsRate => _p.getDouble('ttsRate') ?? 0.45;
   set ttsRate(double v) => _set('ttsRate', v);
 }

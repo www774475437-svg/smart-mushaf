@@ -32,13 +32,18 @@ class RiwayaService {
   final Map<String, Map<int, List<String>>> _cache = {};
 
   Future<File> _file(String id) async {
+    if (kIsWeb) throw UnsupportedError('web');
     final d = await getApplicationDocumentsDirectory();
     return File('${d.path}/riwaya_$id.json');
   }
 
   Future<bool> isDownloaded(String id) async {
-    if (id == 'hafs') return true;
-    return (await _file(id)).exists();
+    if (id == 'hafs' || _cache.containsKey(id)) return true;
+    try {
+      return await (await _file(id)).exists();
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> download(Riwaya r) async {
@@ -57,18 +62,21 @@ class RiwayaService {
           continue;
         }
         final m = (await compute(decodeJson, utf8.decode(res.bodyBytes))) as Map<String, dynamic>;
-        final out = <String, List<String>>{};
+        final out = <int, List<String>>{};
         for (final v in (m['quran'] as List)) {
           final vm = v as Map<String, dynamic>;
-          final ch = (vm['chapter'] as num).toInt().toString();
+          final ch = (vm['chapter'] as num).toInt();
           (out[ch] ??= []).add((vm['text'] as String? ?? '').trim());
         }
         if (out.length < 114) {
           last = 'incomplete';
           continue;
         }
-        await (await _file(r.id)).writeAsString(jsonEncode(out));
-        _cache.remove(r.id);
+        _cache[r.id] = out;
+        try {
+          await (await _file(r.id))
+              .writeAsString(jsonEncode(out.map((k, v) => MapEntry(k.toString(), v))));
+        } catch (_) {}
         return;
       } catch (e) {
         last = e;

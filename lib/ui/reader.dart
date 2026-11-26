@@ -53,7 +53,7 @@ class _MushafScreenState extends State<MushafScreen> {
     _pc = PageController(initialPage: page - 1);
     _ipl.itemPositions.addListener(_onPos);
     AudioCtl.I.addListener(_onAudio);
-    UserStore.I.setLastPage(page);
+    WidgetsBinding.instance.addPostFrameCallback((_) => UserStore.I.setLastPage(page));
     if (AppSettings.I.keepAwake) WakelockPlus.enable();
     if (widget.flashG != null) {
       Timer(const Duration(seconds: 3), () {
@@ -465,7 +465,7 @@ class _MushafPageState extends State<MushafPage> {
 
     final blocks = <Widget>[];
     var spans = <InlineSpan>[];
-    final base = TextStyle(fontFamily: 'AmiriQuran', fontSize: fs, height: 2.05, color: col.text);
+    final base = TextStyle(fontFamily: quranFont(), fontSize: fs, height: 2.05, color: col.text);
 
     void flush() {
       if (spans.isEmpty) return;
@@ -772,6 +772,15 @@ Future<void> showReadingOptions(BuildContext context, {VoidCallback? onAutoChang
                   selected: st.scrollMode,
                   label: (v) => v ? 'تمرير عمودي' : 'تقليب الصفحات',
                   onChanged: (v) => st.scrollMode = v,
+                ),
+                const SizedBox(height: 16),
+                const Text('خط المصحف', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Pills<String>(
+                  values: AppFonts.available,
+                  selected: quranFont(),
+                  label: (f) => kQuranFonts[f] ?? f,
+                  onChanged: (f) => st.quranFont = f,
                 ),
                 const SizedBox(height: 16),
                 Text('حجم الخط: ${ar(st.fontSize.round())}', style: const TextStyle(fontWeight: FontWeight.w700)),

@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-apk
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -85,3 +85,47 @@ jobs:
           name: المصحف الذكي 1.0.${{ github.run_number }}
           files: smart-mushaf-*.apk
           make_latest: true
+
+  web:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Cache Quran data and fonts
+        uses: actions/cache@v4
+        with:
+          path: |
+            assets/data
+            assets/fonts
+          key: quran-data-${{ hashFiles('tool/build_data.py') }}
+
+      - name: Download Quran data and fonts
+        run: python3 tool/build_data.py
+
+      - name: Create web project
+        run: |
+          flutter create --org com.abualathari --project-name smart_mushaf --platforms web .
+          pip install pillow --break-system-packages -q || pip install pillow -q
+          python3 tool/patch_web.py
+
+      - run: flutter pub get
+
+      - name: Build website
+        run: flutter build web --release --base-href /smart-mushaf/
+
+      - name: Publish website (gh-pages branch)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: build/web
+          force_orphan: true
+          user_name: www774475437-svg
+          user_email: 338496743+www774475437-svg@users.noreply.github.com
+          commit_message: website update

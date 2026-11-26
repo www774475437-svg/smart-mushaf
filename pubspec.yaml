@@ -21,6 +21,7 @@ dependencies:
   speech_to_text: ^7.0.0
   flutter_tts: ^4.2.0
   scrollable_positioned_list: ^0.3.8
+  archive: ^3.6.1
 
 flutter:
   uses-material-design: true
@@ -31,6 +32,18 @@ flutter:
     - family: AmiriQuran
       fonts:
         - asset: assets/fonts/AmiriQuran-Regular.ttf
+    - family: UthmanicHafs
+      fonts:
+        - asset: assets/fonts/UthmanicHafs.ttf
+    - family: Scheherazade
+      fonts:
+        - asset: assets/fonts/Scheherazade-Regular.ttf
+    - family: NotoNaskh
+      fonts:
+        - asset: assets/fonts/NotoNaskh-Regular.ttf
+    - family: Lateef
+      fonts:
+        - asset: assets/fonts/Lateef-Regular.ttf
     - family: Tajawal
       fonts:
         - asset: assets/fonts/Tajawal-Regular.ttf

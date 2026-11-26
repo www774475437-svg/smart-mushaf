@@ -66,15 +66,43 @@ class _SmartTafsirScreenState extends State<SmartTafsirScreen> {
               gradient: const LinearGradient(colors: [Color(0xFF3B2A12), kGoldDeep]),
               borderRadius: BorderRadius.circular(22),
             ),
-            child: const Row(
+            child: Column(
               children: [
-                Icon(Icons.lightbulb_rounded, color: Colors.white, size: 34),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'اقرأ تفسير الصفحة كاملة، واستمع إليه بصوت مقروء، وابحث عن أي معنى داخل التفاسير.',
-                    style: TextStyle(color: Colors.white, height: 1.7),
-                  ),
+                const Row(
+                  children: [
+                    Icon(Icons.lightbulb_rounded, color: Colors.white, size: 34),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'اقرأ تفسير الصفحة كاملة من ثمانية تفاسير، واستمع إليه بصوت مقروء، وابحث عن أي معنى داخل التفاسير.',
+                        style: TextStyle(color: Colors.white, height: 1.7),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
+                        onPressed: () => showSoon(context),
+                        icon: const Icon(Icons.question_answer_rounded),
+                        label: const Text('اسأل عن الصفحة'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
+                        onPressed: () => showSoon(context, title: 'تفسير ابن عثيمين'),
+                        icon: const Icon(Icons.menu_book_rounded),
+                        label: const Text('ابن عثيمين'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -219,7 +247,7 @@ class _SmartTafsirScreenState extends State<SmartTafsirScreen> {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Text(
-                'تفسير ابن عثيمين رحمه الله وصوته في التفسير سيُضافان في تحديث قادم بإذن الله، بنقل كلامه بنصّه مع ذكر المصدر.',
+                'تفسير ابن عثيمين رَحِمَهُ الله وصوته سيُضافان بإذن الله عند توفر نسخة موثوقة من تفسيره، بنقل كلامه بنصّه مع ذكر المصدر.',
                 textAlign: TextAlign.center,
                 style: TextStyle(height: 1.7),
               ),

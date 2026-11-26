@@ -38,7 +38,12 @@ class UserStore extends ChangeNotifier {
   int khatmaDays = 0;
   int khatmaStart = 0;
   Set<int> khatmaDone = {};
-  int readSeconds = 0;
+  Map<int, String> notes = {};
+  Map<String, int> dayPages = {};
+  Set<int> _todayPages = {};
+  String _todayKey = '';
+
+  static String dayKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
 
   Future<void> init() async {
     _p = await SharedPreferences.getInstance();
@@ -55,6 +60,12 @@ class UserStore extends ChangeNotifier {
         khatmaDays = m['kd'] as int? ?? 0;
         khatmaStart = m['ks'] as int? ?? 0;
         khatmaDone = Set<int>.from((m['kdn'] as List? ?? []).map((e) => e as int));
+        final n = m['n'] as Map<String, dynamic>? ?? {};
+        notes = n.map((k, v) => MapEntry(int.parse(k), v as String));
+        final dp = m['dp'] as Map<String, dynamic>? ?? {};
+        dayPages = dp.map((k, v) => MapEntry(k, v as int));
+        _todayKey = m['tk'] as String? ?? '';
+        _todayPages = Set<int>.from((m['tp'] as List? ?? []).map((e) => e as int));
       }
     } catch (_) {}
   }
@@ -70,15 +81,56 @@ class UserStore extends ChangeNotifier {
           'kd': khatmaDays,
           'ks': khatmaStart,
           'kdn': khatmaDone.toList(),
+          'n': notes.map((k, v) => MapEntry(k.toString(), v)),
+          'dp': dayPages,
+          'tk': _todayKey,
+          'tp': _todayPages.toList(),
         }));
     notifyListeners();
   }
 
   void setLastPage(int p) {
-    if (p == lastPage) return;
-    lastPage = p;
-    _p.setInt('lastPage', p);
-    notifyListeners();
+    final k = dayKey(DateTime.now());
+    if (k != _todayKey) {
+      _todayKey = k;
+      _todayPages = {};
+    }
+    final newPage = _todayPages.add(p);
+    if (newPage) dayPages[k] = _todayPages.length;
+    if (p != lastPage) {
+      lastPage = p;
+      _p.setInt('lastPage', p);
+    }
+    if (newPage) {
+      _save();
+    } else {
+      notifyListeners();
+    }
+  }
+
+  int get pagesToday => dayPages[dayKey(DateTime.now())] ?? 0;
+  int get totalDays => dayPages.values.where((v) => v > 0).length;
+
+  /// Consecutive days with reading, ending today (or yesterday).
+  int get streak {
+    var d = DateTime.now();
+    if ((dayPages[dayKey(d)] ?? 0) == 0) d = d.subtract(const Duration(days: 1));
+    var n = 0;
+    while ((dayPages[dayKey(d)] ?? 0) > 0) {
+      n++;
+      d = d.subtract(const Duration(days: 1));
+    }
+    return n;
+  }
+
+  // Notes
+  void setNote(int g, String text) {
+    if (text.trim().isEmpty) {
+      notes.remove(g);
+    } else {
+      notes[g] = text.trim();
+    }
+    _save();
   }
 
   // Bookmarks

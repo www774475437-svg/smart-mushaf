@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/settings.dart';
 
@@ -225,4 +228,41 @@ class SurahNumberBadge extends StatelessWidget {
       child: Text(ar(n), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
     );
   }
+}
+
+const Map<String, String> kQuranFonts = {
+  'AmiriQuran': 'أميري قرآن',
+  'UthmanicHafs': 'العثماني (مجمع الملك فهد)',
+  'Scheherazade': 'شهرزاد',
+  'NotoNaskh': 'النسخ',
+  'Lateef': 'لطيف',
+};
+
+class AppFonts {
+  static List<String> available = ['AmiriQuran'];
+  static Future<void> init() async {
+    try {
+      final l = List<String>.from(jsonDecode(await rootBundle.loadString('assets/data/fonts.json')) as List);
+      available = [for (final f in kQuranFonts.keys) if (f == 'AmiriQuran' || l.contains(f)) f];
+    } catch (_) {}
+  }
+}
+
+/// The mushaf font the reader chose (falls back to Amiri Quran).
+String quranFont() {
+  final f = AppSettings.I.quranFont;
+  return AppFonts.available.contains(f) ? f : 'AmiriQuran';
+}
+
+/// Placeholder for features that will be switched on later.
+Future<void> showSoon(BuildContext context, {String? title}) {
+  return showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      icon: const Icon(Icons.lightbulb_rounded, color: kGold, size: 40),
+      title: Text(title ?? 'الذكاء الاصطناعي'),
+      content: const Text('هذه الميزة قريبًا بإذن الله.', textAlign: TextAlign.center),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('حسنًا'))],
+    ),
+  );
 }

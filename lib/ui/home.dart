@@ -8,6 +8,7 @@ import 'khatma.dart';
 import 'reader.dart';
 import 'reciters_screen.dart';
 import 'search.dart';
+import 'share_image.dart';
 import 'smart_tafsir.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -108,6 +109,35 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (DateTime.now().weekday == DateTime.friday)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                    child: Material(
+                      color: kGold.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(18),
+                      child: ListTile(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                        leading: const Icon(Icons.wb_sunny_rounded, color: kGoldDeep),
+                        title: const Text('يوم الجمعة', style: TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: const Text('اقرأ سورة الكهف'),
+                        trailing: const Icon(Icons.chevron_left_rounded),
+                        onTap: () => MushafScreen.open(context, q.surahPage(18)),
+                      ),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+                  child: Row(
+                    children: [
+                      _Stat(Icons.menu_book_rounded, ar(st.pagesToday), 'صفحة اليوم'),
+                      const SizedBox(width: 8),
+                      _Stat(Icons.local_fire_department_rounded, ar(st.streak), 'أيام متتالية'),
+                      const SizedBox(width: 8),
+                      _Stat(Icons.verified_rounded, ar(st.memorized.length), 'سورة محفوظة'),
+                    ],
+                  ),
+                ),
+                const _AyahOfDay(),
                 if (st.hasKhatma)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
@@ -237,6 +267,92 @@ class _Feature extends StatelessWidget {
               const SizedBox(height: 8),
               Text(label, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  final IconData icon;
+  final String value, label;
+  const _Stat(this.icon, this.value, this.label);
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: kGoldDeep, size: 22),
+            const SizedBox(height: 4),
+            Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            Text(label, style: const TextStyle(fontSize: 11.5)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AyahOfDay extends StatelessWidget {
+  const _AyahOfDay();
+
+  static int pick() {
+    final q = QuranData.I;
+    final now = DateTime.now();
+    final days = DateTime(now.year, now.month, now.day).difference(DateTime(2024, 1, 1)).inDays;
+    var g = (days * 7919 + 13) % 6236;
+    var tries = 0;
+    while ((q.ayahs[g].text.length > 170 || q.ayahs[g].text.length < 40) && tries < 400) {
+      g = (g + 97) % 6236;
+      tries++;
+    }
+    return g;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = QuranData.I;
+    final g = pick();
+    final ay = q.ayahs[g];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(22),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: () => MushafScreen.open(context, ay.page, flashG: g),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.wb_sunny_outlined, color: kGoldDeep),
+                    const SizedBox(width: 8),
+                    const Text('آية اليوم', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                    const Spacer(),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.share_rounded, size: 20),
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ShareImageScreen(g: g))),
+                    ),
+                  ],
+                ),
+                Text('${ay.text} ﴿${ar(ay.a)}﴾',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontFamily: quranFont(), fontSize: 21, height: 2)),
+                const SizedBox(height: 4),
+                Text('سورة ${surahName(ay.s)}', style: const TextStyle(color: kGoldDeep, fontWeight: FontWeight.w600)),
+              ],
+            ),
           ),
         ),
       ),

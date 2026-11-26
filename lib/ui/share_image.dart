@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../data/quran.dart';
@@ -40,11 +38,10 @@ class _ShareImageScreenState extends State<ShareImageScreen> {
       final boundary = _key.currentContext!.findRenderObject() as RenderRepaintBoundary;
       final img = await boundary.toImage(pixelRatio: 3);
       final data = await img.toByteData(format: ui.ImageByteFormat.png);
-      final dir = await getTemporaryDirectory();
-      final f = File('${dir.path}/ayah_${widget.g}_${DateTime.now().millisecondsSinceEpoch}.png');
-      await f.writeAsBytes(data!.buffer.asUint8List());
       final ay = QuranData.I.ayahs[widget.g];
-      await Share.shareXFiles([XFile(f.path)], text: 'سورة ${surahName(ay.s)}: ${ay.a}');
+      final file = XFile.fromData(data!.buffer.asUint8List(),
+          mimeType: 'image/png', name: 'ayah_${ay.s}_${ay.a}.png');
+      await Share.shareXFiles([file], text: 'سورة ${surahName(ay.s)}: ${ay.a}');
     } catch (_) {
       if (mounted) toast(context, 'تعذّرت المشاركة');
     }
@@ -86,7 +83,7 @@ class _ShareImageScreenState extends State<ShareImageScreen> {
                   children: [
                     Text('﴿${ay.text}﴾',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontFamily: 'AmiriQuran', fontSize: 24, height: 2.1, color: fg)),
+                        style: TextStyle(fontFamily: quranFont(), fontSize: 24, height: 2.1, color: fg)),
                     const SizedBox(height: 10),
                     Text('سورة ${surahName(ay.s)} • الآية ${ar(ay.a)}',
                         style: const TextStyle(color: kGold, fontWeight: FontWeight.w700)),
