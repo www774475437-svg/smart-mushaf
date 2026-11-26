@@ -270,10 +270,10 @@ class SurahFrame extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       textDirection: TextDirection.rtl,
                       children: [
-                        Text('surah',
+                        Text(String.fromCharCode(0xE000),
                             textDirection: TextDirection.ltr,
                             style: TextStyle(fontFamily: 'SurahNames', fontSize: height * 0.62, color: col.text, height: 1.1)),
-                        Text(s.toString().padLeft(3, '0'),
+                        Text(String.fromCharCode(0xE000 + int.parse(s.toString(), radix: 16)),
                             textDirection: TextDirection.ltr,
                             style: TextStyle(fontFamily: 'SurahNames', fontSize: height * 0.62, color: col.text, height: 1.1)),
                       ],
