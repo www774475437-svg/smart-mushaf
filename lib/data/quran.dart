@@ -45,8 +45,8 @@ String stripTashkeel(String s) {
 class Ayah {
   final int g, s, a, page, juz, hq;
   final bool sajda;
-  final String text;
-  const Ayah(this.g, this.s, this.a, this.page, this.juz, this.hq, this.sajda, this.text);
+  String text;
+  Ayah(this.g, this.s, this.a, this.page, this.juz, this.hq, this.sajda, this.text);
   int get hizb => ((hq - 1) ~/ 4) + 1;
   String get ref => 'سورة ${surahName(s)}: $a';
 }

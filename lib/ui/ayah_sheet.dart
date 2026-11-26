@@ -226,7 +226,7 @@ class _AyahSheetState extends State<AyahSheet> {
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: kGold.withValues(alpha: 0.4)),
               ),
-              child: Text('${ay.text} ﴿${ar(ay.a)}﴾',
+              child: Text('${ay.text} ${ayahMark(ay.a)}',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontFamily: quranFont(), fontSize: 22, height: 2)),
             ),

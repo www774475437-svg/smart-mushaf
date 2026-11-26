@@ -52,7 +52,7 @@ class _RiwayaReaderState extends State<RiwayaReader> {
           final spans = <InlineSpan>[];
           for (var i = 0; i < verses.length; i++) {
             spans.add(TextSpan(text: '${verses[i]} '));
-            spans.add(TextSpan(text: '﴿${ar(i + 1)}﴾ ', style: TextStyle(color: col.accent)));
+            spans.add(TextSpan(text: '${ayahMark(i + 1)} ', style: TextStyle(color: col.accent)));
           }
           return ListView(
             padding: const EdgeInsets.all(16),

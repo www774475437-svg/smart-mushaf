@@ -12,7 +12,9 @@ import '../services/audio.dart';
 import '../services/settings.dart';
 import '../services/store.dart';
 import 'ayah_sheet.dart';
+import '../data/layout.dart';
 import 'common.dart';
+import 'mushaf_lines.dart';
 import 'reciters_screen.dart';
 
 const _basmala = 'بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ';
@@ -55,6 +57,9 @@ class _MushafScreenState extends State<MushafScreen> {
     AudioCtl.I.addListener(_onAudio);
     WidgetsBinding.instance.addPostFrameCallback((_) => UserStore.I.setLastPage(page));
     if (AppSettings.I.keepAwake) WakelockPlus.enable();
+    Timer(const Duration(seconds: 3), () {
+      if (mounted && bars && !autoOn) setState(() => bars = false);
+    });
     if (widget.flashG != null) {
       Timer(const Duration(seconds: 3), () {
         if (mounted && selectedG == widget.flashG) setState(() => selectedG = null);
@@ -455,6 +460,9 @@ class _MushafPageState extends State<MushafPage> {
   }
 
   Widget _build(BuildContext context) {
+    if (widget.expand && MushafLayout.I.ready && quranFont() == 'UthmanicHafs') {
+      return MushafLinesPage(page: widget.page, selectedG: widget.selectedG, onLongPress: widget.onLongPress);
+    }
     final q = QuranData.I;
     final st = AppSettings.I;
     final col = pageColors(st.theme);
@@ -506,7 +514,7 @@ class _MushafPageState extends State<MushafPage> {
         spans.add(TextSpan(text: '۩ ', style: TextStyle(color: col.accent, backgroundColor: bg), recognizer: rec));
       }
       spans.add(TextSpan(
-        text: '﴿${ar(ay.a)}﴾ ',
+        text: '${ayahMark(ay.a)} ',
         style: TextStyle(color: col.accent, backgroundColor: bg, fontSize: fs * 0.82),
         recognizer: rec,
       ));

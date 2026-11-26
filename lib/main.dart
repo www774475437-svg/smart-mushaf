@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'data/layout.dart';
 import 'data/quran.dart';
 import 'data/reciters.dart';
 import 'data/tafsir.dart';
@@ -64,7 +65,7 @@ class _BootState extends State<Boot> {
   @override
   void initState() {
     super.initState();
-    _f = QuranData.I.load();
+    _f = QuranData.I.load().then((_) => MushafLayout.I.load());
   }
 
   @override

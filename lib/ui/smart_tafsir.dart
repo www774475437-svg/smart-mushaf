@@ -299,7 +299,7 @@ class _AyahTafsirState extends State<_AyahTafsir> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('${ay.text} ﴿${ar(ay.a)}﴾',
+          Text('${ay.text} ${ayahMark(ay.a)}',
               textAlign: TextAlign.center, style: TextStyle(fontFamily: quranFont(), fontSize: 19, height: 1.9)),
           const Divider(),
           FutureBuilder<String>(

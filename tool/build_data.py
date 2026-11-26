@@ -273,6 +273,74 @@ if os.path.exists(src):
         asb[str(START[int(ss)] + int(aa) - 1)] = v
 write('asbab.json', asb)
 
+
+# ---------------- Madinah mushaf line layout (15 lines per page) ----------------
+if not os.path.exists(os.path.join(OUT, 'layout.json.gz')):
+    def page_words(p):
+        out = []
+        pg = 1
+        while True:
+            d = fetch_json('https://api.quran.com/api/v4/verses/by_page/%d?words=true&per_page=50&page=%d'
+                           '&word_fields=text_qpc_hafs,text_uthmani,line_number' % (p, pg), tries=5, quiet=True)
+            for v in d.get('verses', []):
+                ss, aa = v['verse_key'].split(':')
+                gi = START[int(ss)] + int(aa) - 1
+                for w in v.get('words', []):
+                    t = w.get('text_qpc_hafs') or w.get('text_uthmani') or w.get('text') or ''
+                    out.append((int(w.get('line_number') or 0), gi, t, 1 if w.get('char_type_name') == 'end' else 0,
+                                int(ss), int(aa)))
+            nxt = (d.get('pagination') or {}).get('next_page')
+            if not nxt:
+                break
+            pg = int(nxt)
+        return out
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(6) as ex:
+            allp = list(ex.map(page_words, range(1, 605)))
+        pages = []
+        basmala = ''
+        for pi, words in enumerate(allp):
+            p = pi + 1
+            lines = {}
+            for ln, gi, t, e, ss, aa in words:
+                lines.setdefault(ln, []).append((gi, t, e, ss, aa))
+            if p == 1:
+                basmala = ' '.join(t for ln, gi, t, e, ss, aa in words if ss == 1 and aa == 1 and not e)
+            total = max(lines) if p in (1, 2) else 15
+            res = [None] * total
+            last_s = words[-1][4] if words else 1
+            ln = 1
+            while ln <= total:
+                if ln in lines:
+                    res[ln - 1] = ['w', [[gi, t, e] for gi, t, e, ss, aa in lines[ln]]]
+                    ln += 1
+                    continue
+                run = [ln]
+                while run[-1] + 1 <= total and (run[-1] + 1) not in lines:
+                    run.append(run[-1] + 1)
+                nxt = run[-1] + 1
+                if nxt <= total:
+                    s_next = lines[nxt][0][3]
+                else:
+                    s_next = last_s + 1
+                if len(run) >= 2:
+                    res[run[0] - 1] = ['s', s_next]
+                    res[run[1] - 1] = ['b']
+                elif s_next in (1, 9) or nxt > total:
+                    res[run[0] - 1] = ['s', s_next]
+                elif run[0] == 1:
+                    res[run[0] - 1] = ['b']
+                else:
+                    res[run[0] - 1] = ['s', s_next]
+                ln = run[-1] + 1
+            pages.append(res)
+        nwords = sum(len(l[1]) for pg_ in pages for l in pg_ if l and l[0] == 'w')
+        assert nwords > 80000, nwords
+        write_gz('layout.json.gz', {'b': basmala, 'p': pages})
+    except Exception as e:  # noqa
+        print('WARNING: mushaf layout not built:', e)
+
 # ---------------- Fonts ----------------
 FONT_SOURCES = {
     'AmiriQuran-Regular.ttf': ['https://github.com/google/fonts/raw/main/ofl/amiriquran/AmiriQuran-Regular.ttf'],

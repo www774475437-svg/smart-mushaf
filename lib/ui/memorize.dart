@@ -611,7 +611,7 @@ class _HideTestScreenState extends State<HideTestScreen> {
                                       )
                                     : Text(words[i], style: TextStyle(fontFamily: quranFont(), fontSize: 21, height: 2)),
                               ),
-                            Text('﴿${ar(ay.a)}﴾', style: TextStyle(fontFamily: quranFont(), fontSize: 18, color: kGoldDeep, height: 2)),
+                            Text('${ayahMark(ay.a)}', style: TextStyle(fontFamily: quranFont(), fontSize: 18, color: kGoldDeep, height: 2)),
                           ],
                         ),
                         Row(

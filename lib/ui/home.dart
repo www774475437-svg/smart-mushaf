@@ -346,7 +346,7 @@ class _AyahOfDay extends StatelessWidget {
                     ),
                   ],
                 ),
-                Text('${ay.text} ﴿${ar(ay.a)}﴾',
+                Text('${ay.text} ${ayahMark(ay.a)}',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontFamily: quranFont(), fontSize: 21, height: 2)),
                 const SizedBox(height: 4),

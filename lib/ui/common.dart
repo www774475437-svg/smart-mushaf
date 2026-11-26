@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../data/layout.dart';
 import '../services/settings.dart';
 
 const kEmerald = Color(0xFF0F5C4A);
@@ -262,4 +263,21 @@ Future<void> showSoon(BuildContext context, {String? title}) {
       actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('حسنًا'))],
     ),
   );
+}
+
+/// End-of-ayah mark: the mushaf font draws the number inside its ornament.
+String ayahMark(int a) => (MushafLayout.I.ready && quranFont() == 'UthmanicHafs') ? ar(a) : '﴿${ar(a)}﴾';
+
+String hizbLabel(int hq) {
+  final h = ((hq - 1) ~/ 4) + 1;
+  switch ((hq - 1) % 4) {
+    case 1:
+      return 'ربع الحزب $h';
+    case 2:
+      return 'نصف الحزب $h';
+    case 3:
+      return 'ثلاثة أرباع الحزب $h';
+    default:
+      return 'الحزب $h';
+  }
 }
