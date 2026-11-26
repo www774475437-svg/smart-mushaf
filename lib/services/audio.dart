@@ -383,6 +383,26 @@ class AudioCtl extends ChangeNotifier {
     }
   }
 
+  bool get looping => player.loopMode != LoopMode.off || _loopFromMs != null;
+
+  /// Repeat what is playing without end, or play it once.
+  Future<void> toggleLoop() async {
+    final on = !looping;
+    AppSettings.I.repeatRange = on ? 0 : 1;
+    if (!on) _loopFromMs = null;
+    if (_timing != null && _stopAtMs != null) {
+      // a part of a surah: loop by seeking back to its start
+      if (on) {
+        final a = currentG == null ? 1 : QuranData.I.ayahs[currentG!].a;
+        _loopFromMs = _timing!.firstWhere((e) => e[0] == a, orElse: () => _timing!.first)[1];
+      }
+    } else {
+      await player.setLoopMode(!on ? LoopMode.off : (_queue.isEmpty ? LoopMode.one : LoopMode.all));
+    }
+    if (on) _continue = false;
+    notifyListeners();
+  }
+
   Future<void> toggle() async {
     if (player.playing) {
       await player.pause();

@@ -470,8 +470,12 @@ class _MushafPageState extends State<MushafPage> {
   }
 
   Widget _build(BuildContext context) {
-    if (widget.expand && MushafLayout.I.ready && quranFont() == 'UthmanicHafs') {
-      return MushafLinesPage(page: widget.page, selectedG: widget.selectedG, onLongPress: widget.onLongPress);
+    if (MushafLayout.I.ready && quranFont() == 'UthmanicHafs') {
+      final pg = MushafLinesPage(page: widget.page, selectedG: widget.selectedG, onLongPress: widget.onLongPress);
+      if (widget.expand) return pg;
+      // vertical scrolling: the very same page, one screen tall
+      final mq = MediaQuery.of(context);
+      return SizedBox(height: mq.size.height, child: pg);
     }
     final q = QuranData.I;
     final st = AppSettings.I;
@@ -679,6 +683,7 @@ class AudioBar extends StatelessWidget {
           );
         }
         if (!a.active && onPlay == null) return const SizedBox.shrink();
+        if (a.active) return _BigPlayer(page: page, green: green, bg: bg);
         final q = QuranData.I;
         final r = a.playingReciter ?? Reciters.I.current;
         String title = a.active ? (a.customTitle ?? r.name) : Reciters.I.current.name;
@@ -833,4 +838,153 @@ Future<void> showReadingOptions(BuildContext context, {VoidCallback? onAutoChang
       },
     ),
   );
+}
+
+
+String _mmss(Duration d) {
+  final m = d.inMinutes;
+  final s = d.inSeconds % 60;
+  return '$m:${s.toString().padLeft(2, '0')}';
+}
+
+/// The full player shown while a recitation is playing.
+class _BigPlayer extends StatelessWidget {
+  final int? page;
+  final Color green, bg;
+  const _BigPlayer({this.page, required this.green, required this.bg});
+  @override
+  Widget build(BuildContext context) {
+    final a = AudioCtl.I;
+    final q = QuranData.I;
+    final r = a.playingReciter ?? Reciters.I.current;
+    final title = a.customTitle ?? r.name;
+    String where = '';
+    if (a.customTitle != null) {
+      where = a.customSub ?? '';
+    } else if (a.surahPlaying != null) {
+      where = 'سورة ${surahName(a.surahPlaying!)}';
+    } else if (a.currentG != null) {
+      final ay = q.ayahs[a.currentG!];
+      where = '${surahName(ay.s)}: ${ay.a}';
+    }
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.10)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 12)],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              GestureDetector(
+                onTap: a.stop,
+                child: CircleAvatar(
+                  radius: 13,
+                  backgroundColor: Colors.grey.withValues(alpha: 0.22),
+                  child: const Icon(Icons.close_rounded, size: 16, color: kGoldDeep),
+                ),
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: () => showReciterSheet(context, page: page),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: green, fontWeight: FontWeight.w600, fontSize: 15.5)),
+                          ),
+                          Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: green),
+                        ],
+                      ),
+                      if (where.isNotEmpty) Text(where, style: const TextStyle(fontSize: 12, color: kGoldDeep)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 26),
+            ],
+          ),
+          StreamBuilder<Duration>(
+            stream: a.player.positionStream,
+            builder: (context, snap) {
+              final pos = snap.data ?? Duration.zero;
+              final dur = a.player.duration ?? Duration.zero;
+              final max = dur.inMilliseconds <= 0 ? 1.0 : dur.inMilliseconds.toDouble();
+              final v = pos.inMilliseconds.toDouble().clamp(0.0, max);
+              return Row(
+                children: [
+                  SizedBox(width: 38, child: Text(_mmss(pos), style: const TextStyle(fontSize: 11, color: Colors.grey))),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                      ),
+                      child: Slider(
+                        min: 0,
+                        max: max,
+                        value: v,
+                        activeColor: green,
+                        inactiveColor: Colors.grey.withValues(alpha: 0.3),
+                        onChanged: (x) => a.player.seek(Duration(milliseconds: x.round())),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 38,
+                    child: Text(dur == Duration.zero ? '' : '-${_mmss(dur - pos)}',
+                        textAlign: TextAlign.end, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  ),
+                ],
+              );
+            },
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                tooltip: 'تكرار',
+                icon: Icon(a.looping ? Icons.repeat_on_rounded : Icons.repeat_rounded, color: green),
+                onPressed: a.toggleLoop,
+              ),
+              IconButton(
+                tooltip: 'الآية السابقة',
+                icon: Icon(Icons.fast_forward_rounded, color: green, size: 30),
+                onPressed: a.previous,
+              ),
+              IconButton(
+                icon: Icon(a.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: green, size: 40),
+                onPressed: a.toggle,
+              ),
+              IconButton(
+                tooltip: 'الآية التالية',
+                icon: Icon(Icons.fast_rewind_rounded, color: green, size: 30),
+                onPressed: a.next,
+              ),
+              TextButton(
+                onPressed: () {
+                  const speeds = [1.0, 1.25, 1.5];
+                  final i = speeds.indexOf(AppSettings.I.speed);
+                  a.setSpeed(speeds[(i + 1) % speeds.length]);
+                },
+                child: Text('${AppSettings.I.speed == 1.0 ? '1' : AppSettings.I.speed}×',
+                    style: TextStyle(color: green, fontWeight: FontWeight.w700, fontSize: 15)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
