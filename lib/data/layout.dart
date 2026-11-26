@@ -56,12 +56,23 @@ class MushafLayout {
     });
   }
   String basmala = '';
+
+  /// The calligraphic basmala as glyphs of the page-1 font.
+  String basmalaGlyphs = '';
+  int qcfVersion = 0;
   final List<List<LLine>> pages = [];
 
   Future<void> load() async {
     if (ready) return;
     try {
-      final data = await rootBundle.load('assets/data/layout.json.gz');
+      try {
+        final v = jsonDecode(await rootBundle.loadString('assets/data/qcf.json'));
+        qcfVersion = v is int ? v : (v == true ? 1 : 0);
+      } catch (_) {
+        qcfVersion = 0;
+      }
+      final ci = qcfVersion == 2 ? 3 : 4;
+      final data = await rootBundle.load('assets/data/layout2.json.gz');
       final m = await compute(_decodeLayout, data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
       basmala = (m['b'] as String?) ?? '';
       final texts = <int, StringBuffer>{};
@@ -85,7 +96,7 @@ class MushafLayout {
               final g = (wl[0] as num).toInt();
               final t = wl[1] as String;
               final e = (wl[2] as num) == 1;
-              ws.add(LWord(g, t, e, wl.length > 3 ? (wl[3] as String? ?? '') : ''));
+              ws.add(LWord(g, t, e, (qcfVersion > 0 && wl.length > ci) ? (wl[ci] as String? ?? '') : ''));
               if (!e) {
                 final b = texts[g] ??= StringBuffer();
                 if (b.isNotEmpty) b.write(' ');
@@ -104,10 +115,11 @@ class MushafLayout {
           if (g >= 0 && g < q.ayahs.length) q.ayahs[g].text = b.toString();
         });
         ready = true;
-        try {
-          qcf = jsonDecode(await rootBundle.loadString('assets/data/qcf.json')) == true;
-        } catch (_) {
-          qcf = false;
+        qcf = qcfVersion > 0;
+        final bg = m['bg'] as List?;
+        if (qcf && bg != null && bg.length == 2) {
+          basmalaGlyphs = (bg[qcfVersion == 2 ? 0 : 1] as String?) ?? '';
+          ensureFont(1);
         }
       }
     } catch (_) {

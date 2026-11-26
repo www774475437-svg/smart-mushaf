@@ -97,7 +97,10 @@ class _MushafLinesPageState extends State<MushafLinesPage> {
     final first = q.pageAyahs[page].isEmpty ? q.ayahs[0] : q.ayahs[q.pageAyahs[page].first];
     final audioG = AudioCtl.I.active ? AudioCtl.I.currentG : null;
     final hl = UserStore.I.highlights;
-    final small = TextStyle(color: col.accent, fontSize: 15, fontWeight: FontWeight.w500);
+    final night = st.theme == ReadTheme.night;
+    // our own colour for the page details: a calm green
+    final info = night ? const Color(0xFF7BCBB0) : const Color(0xFF3F7D69);
+    final small = TextStyle(color: info, fontSize: 15, fontWeight: FontWeight.w500);
 
     final body = LayoutBuilder(builder: (context, c) {
       final w = c.maxWidth;
@@ -105,10 +108,10 @@ class _MushafLinesPageState extends State<MushafLinesPage> {
       final ws = _measure(lines, font, glyphs);
       final maxW = ws.fold<double>(1, math.max);
       final full = lines.length >= 15;
-      final lineH = full ? h / 15 : math.min(h / 11, 64.0);
+      final lineH = full ? h / 15 : math.min(h / 12, 78.0);
       var fs = w * 100 / maxW * 0.995;
       fs = math.min(fs, lineH / (glyphs ? 1.45 : 1.72));
-      if (!full) fs = math.min(fs, w / (glyphs ? 13 : 15));
+      if (!full) fs = math.min(w * 100 / maxW * 0.86, lineH / (glyphs ? 1.35 : 1.72));
       final rows = <Widget>[];
       for (var i = 0; i < lines.length; i++) {
         final l = lines[i];
@@ -119,9 +122,13 @@ class _MushafLinesPageState extends State<MushafLinesPage> {
           child = Center(
             child: FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(lay.basmala,
-                  textDirection: TextDirection.rtl,
-                  style: TextStyle(fontFamily: _hafs, fontSize: lineH * 0.5, color: col.text, height: 1.5)),
+              child: (lay.basmalaGlyphs.isNotEmpty && lay.fontReady(1))
+                  ? Text(lay.basmalaGlyphs,
+                      textDirection: TextDirection.rtl,
+                      style: TextStyle(fontFamily: 'QCF1', fontSize: lineH * 0.62, color: col.text, height: 1.3))
+                  : Text(lay.basmala,
+                      textDirection: TextDirection.rtl,
+                      style: TextStyle(fontFamily: _hafs, fontSize: lineH * 0.5, color: col.text, height: 1.5)),
             ),
           );
         } else if (l.kind == 'w') {
@@ -145,7 +152,7 @@ class _MushafLinesPageState extends State<MushafLinesPage> {
             } else if (hl[wd.g] != null) {
               bgs[k] = kHighlightColors[hl[wd.g]!.clamp(0, kHighlightColors.length - 1)].withValues(alpha: 0.42);
             }
-            if (wd.end && !glyphs && fgs[k] == col.text) fgs[k] = col.accent;
+            if (wd.end && fgs[k] == col.text) fgs[k] = info;
           }
           final rad = Radius.circular(lineH * 0.22);
           for (var k = 0; k < n; k++) {
@@ -229,8 +236,8 @@ class _MushafLinesPageState extends State<MushafLinesPage> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                       decoration: BoxDecoration(
-                        color: col.frame.withValues(alpha: 0.14),
-                        border: Border.all(color: col.frame.withValues(alpha: 0.8)),
+                        color: info.withValues(alpha: 0.12),
+                        border: Border.all(color: info.withValues(alpha: 0.7)),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text('$page',
@@ -259,7 +266,7 @@ class SurahFrame extends StatelessWidget {
       height: height,
       width: double.infinity,
       child: CustomPaint(
-        painter: _FramePainter(col),
+        painter: _FramePainter(col, AppSettings.I.theme == ReadTheme.night ? col.frame : const Color(0xFF6FA08D)),
         child: Center(
           child: FittedBox(
             fit: BoxFit.scaleDown,
@@ -291,15 +298,16 @@ class SurahFrame extends StatelessWidget {
 
 class _FramePainter extends CustomPainter {
   final PageColors col;
-  _FramePainter(this.col);
+  final Color tone;
+  _FramePainter(this.col, this.tone);
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height;
-    final fill = Paint()..color = Color.alphaBlend(col.frame.withValues(alpha: 0.30), col.bg);
-    final light = Paint()..color = Color.alphaBlend(col.frame.withValues(alpha: 0.12), col.bg);
+    final fill = Paint()..color = Color.alphaBlend(tone.withValues(alpha: 0.30), col.bg);
+    final light = Paint()..color = Color.alphaBlend(tone.withValues(alpha: 0.12), col.bg);
     final line = Paint()
-      ..color = col.frame
+      ..color = tone
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.3;
     final thin = Paint()
@@ -340,7 +348,7 @@ class _FramePainter extends CustomPainter {
             Rect.fromCenter(center: pc, width: r * 0.5, height: r * 0.5), Paint()..color = col.bg.withValues(alpha: 0.85));
         canvas.drawOval(Rect.fromCenter(center: pc, width: r * 0.5, height: r * 0.5), line..strokeWidth = 0.8);
       }
-      canvas.drawCircle(c, r * 0.2, Paint()..color = col.frame);
+      canvas.drawCircle(c, r * 0.2, Paint()..color = tone);
       line.strokeWidth = 1.3;
       // small scrolls either side of the rosette
       for (final d in [-1.0, 1.0]) {

@@ -275,20 +275,20 @@ write('asbab.json', asb)
 
 
 # ---------------- Madinah mushaf line layout (15 lines per page) ----------------
-if not os.path.exists(os.path.join(OUT, 'layout.json.gz')):
+if not os.path.exists(os.path.join(OUT, 'layout2.json.gz')):
     def page_words(p):
         out = []
         pg = 1
         while True:
-            d = fetch_json('https://api.quran.com/api/v4/verses/by_page/%d?words=true&per_page=50&page=%d'
-                           '&word_fields=text_qpc_hafs,text_uthmani,line_number,code_v1' % (p, pg), tries=5, quiet=True)
+            d = fetch_json('https://api.quran.com/api/v4/verses/by_page/%d?words=true&per_page=50&page=%d&mushaf=1'
+                           '&word_fields=text_qpc_hafs,text_uthmani,line_number,code_v1,code_v2' % (p, pg), tries=5, quiet=True)
             for v in d.get('verses', []):
                 ss, aa = v['verse_key'].split(':')
                 gi = START[int(ss)] + int(aa) - 1
                 for w in v.get('words', []):
                     t = w.get('text_qpc_hafs') or w.get('text_uthmani') or w.get('text') or ''
                     out.append((int(w.get('line_number') or 0), gi, t, 1 if w.get('char_type_name') == 'end' else 0,
-                                int(ss), int(aa), w.get('code_v1') or ''))
+                                int(ss), int(aa), [w.get('code_v2') or '', w.get('code_v1') or '']))
             nxt = (d.get('pagination') or {}).get('next_page')
             if not nxt:
                 break
@@ -300,6 +300,7 @@ if not os.path.exists(os.path.join(OUT, 'layout.json.gz')):
             allp = list(ex.map(page_words, range(1, 605)))
         pages = []
         basmala = ''
+        bglyph = ['', '']
         for pi, words in enumerate(allp):
             p = pi + 1
             lines = {}
@@ -307,13 +308,15 @@ if not os.path.exists(os.path.join(OUT, 'layout.json.gz')):
                 lines.setdefault(ln, []).append((gi, t, e, ss, aa, cv))
             if p == 1:
                 basmala = ' '.join(t for ln, gi, t, e, ss, aa, cv in words if ss == 1 and aa == 1 and not e)
+                for k in (0, 1):
+                    bglyph[k] = ''.join(cv[k] for ln, gi, t, e, ss, aa, cv in words if ss == 1 and aa == 1 and not e)
             total = max(lines) if p in (1, 2) else 15
             res = [None] * total
             last_s = words[-1][4] if words else 1
             ln = 1
             while ln <= total:
                 if ln in lines:
-                    res[ln - 1] = ['w', [[gi, t, e, cv] for gi, t, e, ss, aa, cv in lines[ln]]]
+                    res[ln - 1] = ['w', [[gi, t, e, cv[0], cv[1]] for gi, t, e, ss, aa, cv in lines[ln]]]
                     ln += 1
                     continue
                 run = [ln]
@@ -337,7 +340,7 @@ if not os.path.exists(os.path.join(OUT, 'layout.json.gz')):
             pages.append(res)
         nwords = sum(len(l[1]) for pg_ in pages for l in pg_ if l and l[0] == 'w')
         assert nwords > 80000, nwords
-        write_gz('layout.json.gz', {'b': basmala, 'p': pages})
+        write_gz('layout2.json.gz', {'b': basmala, 'bg': bglyph, 'p': pages})
     except Exception as e:  # noqa
         print('WARNING: mushaf layout not built:', e)
 
@@ -346,21 +349,24 @@ if not os.path.exists(os.path.join(OUT, 'layout.json.gz')):
 QCF = 'assets/qcf'
 os.makedirs(QCF, exist_ok=True)
 open(os.path.join(QCF, 'keep.txt'), 'w').write('qcf')
-QCF_URLS = [
-    'https://raw.githubusercontent.com/quran/quran.com-frontend-next/production/public/fonts/quran/hafs/v1/ttf/p%d.ttf',
-    'https://raw.githubusercontent.com/quran/quran.com-frontend-next/master/public/fonts/quran/hafs/v1/ttf/p%d.ttf',
-    'https://verses.quran.foundation/fonts/quran/hafs/v1/ttf/p%d.ttf',
-    'https://static.qurancdn.com/fonts/quran/hafs/v1/ttf/p%d.ttf',
+QCF_BASES = [
+    'https://raw.githubusercontent.com/quran/quran.com-frontend-next/production/public/fonts/quran/hafs/%s/ttf/p%d.ttf',
+    'https://raw.githubusercontent.com/quran/quran.com-frontend-next/master/public/fonts/quran/hafs/%s/ttf/p%d.ttf',
+    'https://verses.quran.foundation/fonts/quran/hafs/%s/ttf/p%d.ttf',
+    'https://static.qurancdn.com/fonts/quran/hafs/%s/ttf/p%d.ttf',
 ]
+vfile = os.path.join(QCF, 'version.txt')
+have_ver = open(vfile).read().strip() if os.path.exists(vfile) else ''
 
 
-def qcf_one(n):
+def qcf_one(args):
+    ver, n = args
     p = os.path.join(QCF, 'p%d.ttf' % n)
-    if os.path.exists(p) and os.path.getsize(p) > 5000:
+    if have_ver == ver and os.path.exists(p) and os.path.getsize(p) > 5000:
         return True
-    for u in QCF_URLS:
+    for u in QCF_BASES:
         try:
-            b = fetch(u % n, tries=2, quiet=True)
+            b = fetch(u % (ver, n), tries=2, quiet=True)
             if len(b) > 5000 and b[:4] in (b'\x00\x01\x00\x00', b'OTTO', b'true'):
                 open(p, 'wb').write(b)
                 return True
@@ -369,20 +375,27 @@ def qcf_one(n):
     return False
 
 
-qcf_ok = False
 try:
-    if qcf_one(1):
-        with concurrent.futures.ThreadPoolExecutor(8) as ex:
-            qcf_ok = all(ex.map(qcf_one, range(1, 605)))
-except Exception as e:  # noqa
-    print('qcf failed', e)
-try:
-    lay = json.loads(gzip.open(os.path.join(OUT, 'layout.json.gz')).read().decode('utf-8'))
-    has_codes = all(len(w) > 3 and w[3] for l in lay['p'][2] if l and l[0] == 'w' for w in l[1])
+    lay = json.loads(gzip.open(os.path.join(OUT, 'layout2.json.gz')).read().decode('utf-8'))
+    sample = [w for l in lay['p'][2] if l and l[0] == 'w' for w in l[1]]
+    has = [all(len(w) > 3 and w[3] for w in sample), all(len(w) > 4 and w[4] for w in sample)]
 except Exception:  # noqa
-    has_codes = False
-write('qcf.json', bool(qcf_ok and has_codes))
-print('qcf fonts', qcf_ok, 'codes', has_codes,
+    has = [False, False]
+qcf_ver = 0
+for ver, num, ok_codes in (('v2', 2, has[0]), ('v1', 1, has[1])):
+    if not ok_codes:
+        continue
+    try:
+        if qcf_one((ver, 1)):
+            with concurrent.futures.ThreadPoolExecutor(8) as ex:
+                if all(ex.map(qcf_one, [(ver, n) for n in range(1, 605)])):
+                    qcf_ver = num
+                    open(vfile, 'w').write(ver)
+                    break
+    except Exception as e:  # noqa
+        print('qcf', ver, 'failed', e)
+write('qcf.json', qcf_ver)
+print('qcf fonts version', qcf_ver, 'codes', has,
       sum(os.path.getsize(os.path.join(QCF, f)) for f in os.listdir(QCF)))
 
 # ---------------- Fonts ----------------
