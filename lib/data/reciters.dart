@@ -116,6 +116,11 @@ class Reciters extends ChangeNotifier {
       'https://d1.islamhouse.com/data/ar/ih_sounds/chain_01/mokhtasar-fe-tafceer/',
       sub: 'عبدالله الأسمري وصابر عبدالحكم');
 
+  /// The murattal mushaf of الشيخ يحيى الحجوري, kept surah by surah in the app's own store.
+  final Reciter hajuri = const Reciter('st:hajuri', 'يحيى الحجوري', RecKind.surah,
+      'https://github.com/www774475437-svg/smart-mushaf-store/releases/download/hajuri-mushaf/',
+      sub: 'مصحف مرتل • سورة كاملة');
+
   /// The meanings read aloud in other languages.
   final List<Reciter> spoken = [
     for (final r in _spoken)
@@ -157,7 +162,7 @@ class Reciters extends ChangeNotifier {
     } catch (_) {}
   }
 
-  List<Reciter> get everything => [mukhtasar, ...timed, ...perAyah, ...spoken, ...custom, ...all];
+  List<Reciter> get everything => [mukhtasar, hajuri, ...timed, ...perAyah, ...spoken, ...custom, ...all];
 
   Reciter? byId(String id) {
     for (final r in everything) {

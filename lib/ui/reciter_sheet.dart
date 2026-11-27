@@ -10,6 +10,7 @@ import '../data/tafsir.dart';
 import '../services/audio.dart';
 import '../services/tts.dart';
 import 'common.dart';
+import 'hajuri.dart';
 import 'mukhtasar_audio.dart';
 import 'settings_screen.dart';
 import 'reciters_screen.dart';
@@ -236,7 +237,7 @@ class _ReciterSheetState extends State<_ReciterSheet> {
             // one row per reciter: the continuous recording when there is one
             final seen = <String>{};
             final list = <Reciter>[];
-            for (final r in [...rs.timed, ...rs.perAyah, ...rs.custom]) {
+            for (final r in [rs.hajuri, ...rs.timed, ...rs.perAyah, ...rs.custom]) {
               final key = normalizeAr(r.name.split('(').first.trim());
               if (r.custom || seen.add(key)) list.add(r);
             }
@@ -284,6 +285,14 @@ class _ReciterSheetState extends State<_ReciterSheet> {
                     future: tafasir,
                     builder: (context, snap) => _group([
                       _reciter(rs.mukhtasar),
+                      ListTile(
+                        leading: Icon(Icons.play_arrow_outlined, color: kGoldDeep.withValues(alpha: 0.6)),
+                        title: const Text('تفسير ابن كثير — يحيى الحجوري', style: TextStyle(fontSize: 16.5)),
+                        subtitle: Text('دروس مسجَّلة • سورة ${surahName(_surah)}', style: const TextStyle(color: kGoldDeep)),
+                        trailing: const Icon(Icons.chevron_left_rounded, color: Colors.grey),
+                        onTap: () => Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (_) => HajuriTafsirScreen(surah: _surah))),
+                      ),
                       for (final t in snap.data ?? const <AudioTafsir>[])
                         ListTile(
                           leading: Icon(Icons.play_arrow_outlined, color: kGoldDeep.withValues(alpha: 0.6)),

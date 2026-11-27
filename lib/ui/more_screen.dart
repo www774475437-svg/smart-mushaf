@@ -4,6 +4,7 @@ import '../data/quran.dart';
 import '../data/surah_names.dart';
 import '../services/store.dart';
 import 'common.dart';
+import 'hajuri.dart';
 import 'hifz_plan.dart';
 import 'khatma.dart';
 import 'quiz.dart';
@@ -80,6 +81,12 @@ class MoreScreen extends StatelessWidget {
           ]),
           GroupCard(title: 'التدبّر', children: [
             GroupTile(icon: Icons.lightbulb_rounded, color: kGoldDeep, title: 'التفسير الذكي', onTap: () => go(const SmartTafsirScreen())),
+            GroupTile(
+                icon: Icons.headphones_rounded,
+                color: const Color(0xFF2E7D32),
+                title: 'تفسير ابن كثير بصوت الحجوري',
+                subtitle: 'دروس مسجَّلة مرتبة على السور',
+                onTap: () => go(const HajuriTafsirScreen())),
             GroupTile(icon: Icons.history_edu_rounded, color: const Color(0xFF6D4C41), title: 'أسباب النزول', onTap: () => go(const AsbabScreen())),
           ]),
           GroupCard(title: 'العبادة', children: [
