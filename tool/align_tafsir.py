@@ -7,8 +7,6 @@ and the words of each ayah are then looked for, in order, in that transcript.
 usage: align_tafsir.py out_dir surah [surah ...]"""
 import json, os, re, subprocess, sys, urllib.request
 
-import numpy as np
-
 if sys.argv[1] == '--join':
     # put the parts made by the parallel jobs into the one file the app reads
     res = {}
@@ -35,6 +33,7 @@ if sys.argv[1] == '--join':
     print('surahs', len(res), 'ayahs not found', miss)
     sys.exit(0)
 
+import numpy as np
 from faster_whisper import WhisperModel
 
 out = sys.argv[1]
