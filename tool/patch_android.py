@@ -27,6 +27,10 @@ if kts.exists():
         s = re.sub(r'^\s*buildTypes\s*\{', '\n' + block, s, count=1, flags=re.M)
         s = s.replace('signingConfigs.getByName("debug")', 'signingConfigs.getByName("release")')
     s = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 23', s)
+    # the notifications plugin needs core library desugaring
+    if 'isCoreLibraryDesugaringEnabled' not in s:
+        s = re.sub(r'compileOptions\s*\{', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true', s, count=1)
+        s += '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
     kts.write_text(s)
     print(s)
 elif groovy.exists():
@@ -46,6 +50,9 @@ elif groovy.exists():
         s = re.sub(r'^\s*buildTypes\s*\{', '\n' + block, s, count=1, flags=re.M)
         s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
     s = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 23', s)
+    if 'coreLibraryDesugaringEnabled' not in s:
+        s = re.sub(r'compileOptions\s*\{', 'compileOptions {\n        coreLibraryDesugaringEnabled true', s, count=1)
+        s += "\ndependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'\n}\n"
     groovy.write_text(s)
 
 man = app / 'src/main/AndroidManifest.xml'
@@ -58,6 +65,8 @@ perms = (
     '    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>\n'
     '    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>\n'
     '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>\n'
+    '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n'
+    '    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\n'
 )
 if 'android.permission.INTERNET' not in m:
     m = re.sub(r'(<manifest[^>]*>)', r'\1\n' + perms, m, count=1)
@@ -75,6 +84,18 @@ if 'com.ryanheise.audioservice.AudioService"' not in m:
         '        </receiver>\n'
     )
     m = m.replace('</application>', svc + '    </application>', 1)
+if 'ScheduledNotificationReceiver' not in m:
+    nrx = (
+        '        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>\n'
+        '        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">\n'
+        '            <intent-filter>\n'
+        '                <action android:name="android.intent.action.BOOT_COMPLETED"/>\n'
+        '                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>\n'
+        '                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>\n'
+        '            </intent-filter>\n'
+        '        </receiver>\n'
+    )
+    m = m.replace('</application>', nrx + '    </application>', 1)
 
 extra = (
     '        <intent><action android:name="android.speech.RecognitionService"/></intent>\n'
@@ -107,6 +128,7 @@ WIDGETS = [
     ('PlayerWidget', 'تشغيل التلاوة', 180, 60),
     ('MajlisWidget', 'مجلس الحفاظ', 180, 60),
     ('FawasilWidget', 'الفواصل', 250, 60),
+    ('HifzWidget', 'ورد الحفظ اليوم', 180, 60),
 ]
 kdir = None
 for d in (app / 'src/main/kotlin').rglob('MainActivity.kt'):

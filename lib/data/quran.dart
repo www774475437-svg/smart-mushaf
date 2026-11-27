@@ -122,6 +122,25 @@ class QuranData {
   List<String> cleanWords(int g) =>
       normalizeAr(clean[g]).split(' ').where((w) => w.isNotEmpty).toList();
 
+  /// Forgiving search for spoken words: ranks ayahs by how many of the words they hold.
+  List<int> looseSearch(String query, {int limit = 40}) {
+    final ws = normalizeAr(query).split(' ').where((w) => w.length > 1).toSet().toList();
+    if (ws.isEmpty) return [];
+    final need = ws.length <= 2 ? ws.length : (ws.length * 0.6).ceil();
+    final n = norm;
+    final hits = <List<int>>[];
+    for (var i = 0; i < n.length; i++) {
+      final have = n[i].split(' ').toSet();
+      var c = 0;
+      for (final w in ws) {
+        if (have.contains(w)) c++;
+      }
+      if (c >= need) hits.add([i, c]);
+    }
+    hits.sort((a, b) => b[1] != a[1] ? b[1].compareTo(a[1]) : a[0].compareTo(b[0]));
+    return [for (final h in hits.take(limit)) h[0]];
+  }
+
   List<int> search(String query, {int limit = 400}) {
     final q = normalizeAr(query);
     if (q.isEmpty) return [];

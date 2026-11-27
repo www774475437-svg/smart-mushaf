@@ -4,7 +4,10 @@ import '../data/quran.dart';
 import '../data/surah_names.dart';
 import '../services/store.dart';
 import 'common.dart';
+import 'hifz_plan.dart';
 import 'khatma.dart';
+import 'quiz.dart';
+import 'report.dart';
 import 'prayer_screen.dart';
 import 'reciters_screen.dart';
 import 'search.dart';
@@ -37,12 +40,38 @@ class MoreScreen extends StatelessWidget {
                 subtitle: 'صفحات المصحف كلها ملوّنة بحسب حفظك',
                 onTap: () => go(const HifzMapScreen())),
             GroupTile(
+                icon: Icons.flag_rounded,
+                color: const Color(0xFF1565C0),
+                title: 'خطة الحفظ اليومية',
+                subtitle: 'ورد كل يوم مع تذكير',
+                onTap: () => go(const HifzPlanScreen())),
+            GroupTile(
                 icon: Icons.mic_rounded,
                 color: const Color(0xFFC62828),
                 title: 'سمِّع داخل المصحف',
                 onTap: () => go(TasmeeScreen(page: UserStore.I.lastPage))),
             GroupTile(icon: Icons.record_voice_over_rounded, color: kEmerald, title: 'الحفظ والتسميع والمراجعة', onTap: () => tab(3)),
             GroupTile(icon: Icons.groups_rounded, color: kEmeraldDark, title: 'مجلس الحفاظ', onTap: () => tab(2)),
+          ]),
+          GroupCard(title: 'الاختبارات والمتابعة', children: [
+            GroupTile(
+                icon: Icons.quiz_rounded,
+                color: const Color(0xFF6A4C93),
+                title: 'اختبار أكمل الآية',
+                subtitle: 'اختر تكملة الآية أو الآية التي بعدها',
+                onTap: () => go(const QuizScreen(kind: 0))),
+            GroupTile(
+                icon: Icons.compare_arrows_rounded,
+                color: const Color(0xFF00838F),
+                title: 'اختبار المتشابهات',
+                subtitle: 'الآيات التي يشتبه بعضها ببعض',
+                onTap: () => go(const QuizScreen(kind: 1))),
+            GroupTile(
+                icon: Icons.insights_rounded,
+                color: kGoldDeep,
+                title: 'التقرير الأسبوعي',
+                subtitle: 'ما قرأته وسمّعته في سبعة أيام',
+                onTap: () => go(const WeeklyReportScreen())),
           ]),
           GroupCard(title: 'القراءة والاستماع', children: [
             GroupTile(icon: Icons.mic_external_on_rounded, color: const Color(0xFF6A4C93), title: 'القرّاء', onTap: () => go(const RecitersScreen())),

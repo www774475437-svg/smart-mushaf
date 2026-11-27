@@ -15,7 +15,9 @@ import 'services/store.dart';
 import 'ui/common.dart';
 import 'ui/home.dart';
 import 'ui/index_screen.dart';
+import 'ui/hifz_plan.dart';
 import 'ui/khatma.dart';
+import 'services/notify.dart';
 import 'ui/majlis.dart';
 import 'ui/prayer_screen.dart';
 import 'ui/reader.dart';
@@ -135,6 +137,7 @@ class _RootNavState extends State<RootNav> {
     super.initState();
     if (WidgetBridge.supported) {
       WidgetBridge.init();
+      Notify.init();
       HomeWidget.initiallyLaunchedFromHomeWidget().then(_fromWidget).catchError((_) {});
       _sub = HomeWidget.widgetClicked.listen(_fromWidget, onError: (_) {});
     }
@@ -163,6 +166,9 @@ class _RootNavState extends State<RootNav> {
         break;
       case 'kh':
         go(const KhatmaScreen());
+        break;
+      case 'hf':
+        go(const HifzPlanScreen());
         break;
       case 'ts':
         go(TasmeeScreen(page: lp));

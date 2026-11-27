@@ -74,6 +74,13 @@ class UserStore extends ChangeNotifier {
   /// Four coloured place-markers (الفواصل): colour -> [ayah index, time].
   Map<int, List<int>> fawasil = {};
   Map<String, int> dayPages = {};
+
+  /// Per-day activity for the weekly report: day -> [quiz right, quiz total, pages recited, wrong words].
+  Map<String, List<int>> dayStats = {};
+
+  /// Daily memorization plan, counted in half pages. [planPer] 0 means no plan.
+  int planPos = 0, planPer = 0, planDoneDay = 0, planHour = 6, planMin = 0;
+  bool planNotify = true;
   Set<int> _todayPages = {};
   String _todayKey = '';
 
@@ -104,6 +111,17 @@ class UserStore extends ChangeNotifier {
         notes = n.map((k, v) => MapEntry(int.parse(k), v as String));
         final dp = m['dp'] as Map<String, dynamic>? ?? {};
         dayPages = dp.map((k, v) => MapEntry(k, v as int));
+        final ds = m['ds'] as Map<String, dynamic>? ?? {};
+        dayStats = ds.map((k, v) => MapEntry(k, List<int>.from(v as List)));
+        final pl = List<int>.from(m['pl'] as List? ?? const []);
+        if (pl.length >= 6) {
+          planPos = pl[0];
+          planPer = pl[1];
+          planDoneDay = pl[2];
+          planHour = pl[3];
+          planMin = pl[4];
+          planNotify = pl[5] == 1;
+        }
         _todayKey = m['tk'] as String? ?? '';
         _todayPages = Set<int>.from((m['tp'] as List? ?? []).map((e) => e as int));
       }
@@ -126,6 +144,8 @@ class UserStore extends ChangeNotifier {
           'n': notes.map((k, v) => MapEntry(k.toString(), v)),
           'fw': fawasil.map((k, v) => MapEntry(k.toString(), v)),
           'dp': dayPages,
+          'ds': dayStats,
+          'pl': [planPos, planPer, planDoneDay, planHour, planMin, planNotify ? 1 : 0],
           'tk': _todayKey,
           'tp': _todayPages.toList(),
         }));
@@ -164,6 +184,61 @@ class UserStore extends ChangeNotifier {
       d = d.subtract(const Duration(days: 1));
     }
     return n;
+  }
+
+  List<int> statsOf(DateTime d) => dayStats[dayKey(d)] ?? const [0, 0, 0, 0];
+
+  void _stat(int i, int add) {
+    final k = dayKey(DateTime.now());
+    final l = List<int>.from(dayStats[k] ?? const [0, 0, 0, 0]);
+    l[i] += add;
+    dayStats[k] = l;
+    if (dayStats.length > 120) dayStats.remove(dayStats.keys.first);
+  }
+
+  void logQuiz(bool right) {
+    if (right) _stat(0, 1);
+    _stat(1, 1);
+    _save();
+  }
+
+  void logTasmee(int wrong) {
+    _stat(2, 1);
+    _stat(3, wrong);
+    _save();
+  }
+
+  // Daily memorization plan
+  bool get hasPlan => planPer > 0;
+  bool get planDoneToday => planDoneDay == dayNumber();
+  bool get planFinished => planPos >= 1208;
+  int get planFromPage => (planPos ~/ 2 + 1).clamp(1, 604);
+  int get planToPage => ((planPos + planPer - 1) ~/ 2 + 1).clamp(1, 604);
+
+  void setPlan({required int startPage, required int per}) {
+    planPos = (startPage - 1) * 2;
+    planPer = per;
+    planDoneDay = 0;
+    _save();
+  }
+
+  void setPlanTime(int h, int m, bool notify) {
+    planHour = h;
+    planMin = m;
+    planNotify = notify;
+    _save();
+  }
+
+  void planDone() {
+    if (!hasPlan || planDoneToday) return;
+    planPos += planPer;
+    planDoneDay = dayNumber();
+    _save();
+  }
+
+  void stopPlan() {
+    planPer = 0;
+    _save();
   }
 
   void setFasil(int color, int? g) {

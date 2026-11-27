@@ -88,6 +88,7 @@ class ReviewWidget : CardWidget() { override val kind = "rv"; override val defTi
 class StreakWidget : CardWidget() { override val kind = "st"; override val defTitle = "أيام متتالية"; override val defMain = "٠" }
 class TasmeeWidget : CardWidget() { override val kind = "ts"; override val defTitle = "تسميع سريع"; override val defMain = "اضغط لتسمّع" }
 class PlayerWidget : CardWidget() { override val kind = "pl"; override val defTitle = "تشغيل التلاوة"; override val defMain = "اضغط للتشغيل" }
+class HifzWidget : CardWidget() { override val kind = "hf"; override val defTitle = "ورد الحفظ اليوم"; override val defMain = "ابدأ خطة حفظ" }
 class MajlisWidget : CardWidget() { override val kind = "mj"; override val defTitle = "مجلس الحفاظ"; override val defMain = "لا حلقة الآن" }
 
 /** The four coloured place-markers; each one opens its page. */

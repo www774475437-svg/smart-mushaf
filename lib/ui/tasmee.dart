@@ -247,6 +247,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     final wrong = state.values.where((v) => v == 2 || v == 3).length;
     _saveMistakes();
     UserStore.I.setPageStatus(page, wrong == 0 ? 1 : (wrong <= 3 ? 2 : 3));
+    UserStore.I.logTasmee(wrong);
     toast(context, wrong == 0 ? 'أحسنت! أتممت الصفحة بلا أخطاء' : 'أتممت الصفحة • ${ar(wrong)} كلمة تحتاج مراجعة');
   }
 

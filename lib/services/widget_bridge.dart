@@ -16,7 +16,7 @@ class WidgetBridge {
   static Timer? _deb;
   static const _names = [
     'PrayerWidget', 'ContinueWidget', 'KhatmaWidget', 'AyahWidget', 'ReviewWidget',
-    'StreakWidget', 'TasmeeWidget', 'PlayerWidget', 'MajlisWidget', 'FawasilWidget',
+    'StreakWidget', 'TasmeeWidget', 'PlayerWidget', 'MajlisWidget', 'FawasilWidget', 'HifzWidget',
   ];
 
   static bool get supported => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -68,6 +68,18 @@ class WidgetBridge {
         await _set('kh_m', 'ابدأ ختمة من التطبيق');
         await _set('kh_s', '');
         await _set('kh_u', 'smartmushaf://open?to=kh');
+      }
+
+      if (st.hasPlan) {
+        final fp = st.planFromPage, tp = st.planToPage;
+        final part = st.planPer == 1
+            ? 'النصف ${st.planPos.isEven ? 'الأول' : 'الثاني'} من صفحة $fp'
+            : (fp == tp ? 'صفحة $fp' : 'من صفحة $fp إلى $tp');
+        await _set('hf_m', st.planFinished ? 'أتممت الخطة' : part);
+        await _set('hf_s', st.planDoneToday ? 'أتممت ورد اليوم • هذا ورد الغد' : 'سورة ${surahName(q.surahOfPage(fp))}');
+      } else {
+        await _set('hf_m', 'ابدأ خطة حفظ');
+        await _set('hf_s', 'اضغط لتختار ورد كل يوم');
       }
 
       final g = ayahOfDay();

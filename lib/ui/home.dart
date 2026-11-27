@@ -4,6 +4,7 @@ import '../data/quran.dart';
 import '../data/surah_names.dart';
 import '../services/store.dart';
 import 'common.dart';
+import 'hifz_plan.dart';
 import 'khatma.dart';
 import 'more_screen.dart';
 import 'prayer_screen.dart';
@@ -141,6 +142,24 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
                 const _AyahOfDay(),
+                if (st.hasPlan)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                    child: Material(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      child: ListTile(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        leading: IconSquare(st.planDoneToday ? Icons.check_rounded : Icons.flag_rounded,
+                            st.planDoneToday ? const Color(0xFF2E7D32) : const Color(0xFF1565C0)),
+                        title: Text(st.planDoneToday ? 'أتممت ورد الحفظ اليوم' : 'ورد الحفظ اليوم',
+                            style: const TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: Text(st.planDoneToday ? 'ورد الغد: ${planText()}' : planText()),
+                        trailing: const Icon(Icons.chevron_left_rounded),
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HifzPlanScreen())),
+                      ),
+                    ),
+                  ),
                 if (st.hasKhatma)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import '../data/quran.dart';
 import '../data/surah_names.dart';
@@ -21,10 +22,56 @@ class _SearchScreenState extends State<SearchScreen> {
   List<int> results = [];
   List<int> surahs = [];
   bool busy = false;
+  final SpeechToText _stt = SpeechToText();
+  bool _sttReady = false, listening = false;
+
+  Future<void> _voice() async {
+    if (listening) {
+      await _stt.stop();
+      return;
+    }
+    if (!_sttReady) {
+      try {
+        _sttReady = await _stt.initialize(
+          onError: (e) {
+            if (mounted) setState(() => listening = false);
+          },
+          onStatus: (s) {
+            if ((s == 'done' || s == 'notListening') && mounted) setState(() => listening = false);
+          },
+        );
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    if (!_sttReady) {
+      toast(context, 'البحث بالصوت غير متاح هنا. جرّبه في تطبيق الأندرويد واسمح بالميكروفون.');
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      listening = true;
+      mode = 0;
+    });
+    try {
+      await _stt.listen(
+        onResult: (r) {
+          if (!mounted) return;
+          _c.text = r.recognizedWords;
+          _run();
+        },
+        localeId: 'ar_SA',
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 3),
+      );
+    } catch (_) {
+      if (mounted) setState(() => listening = false);
+    }
+  }
 
   @override
   void dispose() {
     _deb?.cancel();
+    _stt.cancel();
     _c.dispose();
     super.dispose();
   }
@@ -49,6 +96,7 @@ class _SearchScreenState extends State<SearchScreen> {
     List<int> r;
     if (mode == 0) {
       r = QuranData.I.search(v);
+      if (r.isEmpty) r = QuranData.I.looseSearch(v);
     } else {
       r = await TafsirService.I.search(TafsirService.I.byId('muyassar'), v);
     }
@@ -76,6 +124,12 @@ class _SearchScreenState extends State<SearchScreen> {
               decoration: InputDecoration(
                 hintText: mode == 0 ? 'اكتب كلمة أو جزءًا من آية…' : 'ابحث في التفسير الميسر…',
                 prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: IconButton(
+                  tooltip: 'البحث بالصوت',
+                  onPressed: _voice,
+                  icon: Icon(listening ? Icons.stop_circle_rounded : Icons.mic_rounded,
+                      color: listening ? Colors.red : kEmerald),
+                ),
                 filled: true,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
               ),
@@ -96,6 +150,11 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ),
           ),
+          if (listening)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('أستمع إليك… اقرأ جزءًا من الآية', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+            ),
           if (busy) const LinearProgressIndicator(),
           if (_c.text.trim().isNotEmpty && !busy)
             Padding(
