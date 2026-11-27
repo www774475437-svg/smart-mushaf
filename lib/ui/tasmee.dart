@@ -78,7 +78,11 @@ class _W {
 /// Recite inside the mushaf page: words are hidden and appear as you read them.
 class TasmeeScreen extends StatefulWidget {
   final int page;
-  const TasmeeScreen({super.key, required this.page});
+
+  /// Reading along: the page stays visible, the words turn green as they are read aloud,
+  /// and the next page opens by itself. Nothing is counted as a mistake.
+  final bool follow;
+  const TasmeeScreen({super.key, required this.page, this.follow = false});
   @override
   State<TasmeeScreen> createState() => _TasmeeScreenState();
 }
@@ -351,6 +355,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   }
 
   void _saveMistakes() {
+    if (widget.follow) return;
     final by = <int, List<String>>{};
     for (final w in words) {
       final st = state[w.key];
@@ -360,6 +365,15 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   }
 
   void _pageDone() {
+    if (widget.follow) {
+      UserStore.I.setLastPage(page);
+      if (page >= 604) return;
+      _go(1);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _listen();
+      });
+      return;
+    }
     final wrong = state.values.where((v) => v == 2 || v == 3).length;
     _saveMistakes();
     UserStore.I.setPageStatus(page, wrong == 0 ? 1 : (wrong <= 3 ? 2 : 3));
@@ -395,8 +409,8 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
         backgroundColor: col.soft,
         title: Column(
           children: [
-            Text('تسميع صفحة ${ar(page)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-            Text('سورة ${surahName(q.surahOfPage(page))} • صحيح ${ar(okN)} • خطأ ${ar(badN)}',
+            Text(widget.follow ? 'القراءة بالمتابعة • صفحة ${ar(page)}' : 'تسميع صفحة ${ar(page)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            Text(widget.follow ? 'سورة ${surahName(q.surahOfPage(page))} • قرأت ${ar(okN + badN)} كلمة' : 'سورة ${surahName(q.surahOfPage(page))} • صحيح ${ar(okN)} • خطأ ${ar(badN)}',
                 style: const TextStyle(fontSize: 11.5, color: kGoldDeep)),
           ],
         ),
@@ -416,6 +430,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
               page: page,
               showInfo: false,
               recite: peekAll ? null : state,
+              reciteOpen: widget.follow,
               onLongPress: (_) {},
             ),
           ),

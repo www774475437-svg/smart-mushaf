@@ -51,6 +51,12 @@ class MoreScreen extends StatelessWidget {
                 color: const Color(0xFFC62828),
                 title: 'سمِّع داخل المصحف',
                 onTap: () => go(TasmeeScreen(page: UserStore.I.lastPage))),
+            GroupTile(
+                icon: Icons.hearing_rounded,
+                color: const Color(0xFF00838F),
+                title: 'القراءة بالمتابعة',
+                subtitle: 'اقرأ بصوتك والتظليل يتبعك ويقلّب الصفحة',
+                onTap: () => go(TasmeeScreen(page: UserStore.I.lastPage, follow: true))),
             GroupTile(icon: Icons.record_voice_over_rounded, color: kEmerald, title: 'الحفظ والتسميع والمراجعة', onTap: () => tab(3)),
             GroupTile(icon: Icons.groups_rounded, color: kEmeraldDark, title: 'مجلس الحفاظ', onTap: () => tab(2)),
           ]),

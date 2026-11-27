@@ -23,6 +23,9 @@ class MushafLinesPage extends StatefulWidget {
 
   /// Recitation mode: words are hidden unless listed here (1 correct, 2 wrong, 3 shown as a hint).
   final Map<String, int>? recite;
+
+  /// With [recite]: keep the words that were not read yet visible (reading along, not a test).
+  final bool reciteOpen;
   final bool showInfo;
   const MushafLinesPage(
       {super.key,
@@ -33,6 +36,7 @@ class MushafLinesPage extends StatefulWidget {
       this.onWordTap,
       this.onWordDoubleTap,
       this.recite,
+      this.reciteOpen = false,
       this.showInfo = true});
   @override
   State<MushafLinesPage> createState() => _MushafLinesPageState();
@@ -159,7 +163,10 @@ class _MushafLinesPageState extends State<MushafLinesPage> {
             if (wd.end && fgs[k] == col.text) fgs[k] = info;
             if (widget.recite != null && !wd.end) {
               final stt = widget.recite!['$i:$k'];
-              if (stt == null) {
+              if (widget.reciteOpen) {
+                // the page stays readable; what has been read turns green
+                bgs[k] = stt == null ? null : const Color(0xFF43A047).withValues(alpha: 0.20);
+              } else if (stt == null) {
                 fgs[k] = Colors.transparent;
                 bgs[k] = Colors.grey.withValues(alpha: 0.13);
               } else if (stt == 2) {
