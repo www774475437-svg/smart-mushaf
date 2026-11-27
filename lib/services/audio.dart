@@ -383,7 +383,9 @@ class AudioCtl extends ChangeNotifier {
 
   /// Plays any single recording (e.g. a recorded tafsir lesson).
   String? customTitle, customSub;
-  Future<void> playUrl(String url, String title, String sub) async {
+  /// [backup] is a second copy of the same recording: it is used by itself, without
+  /// asking, when the first address does not answer.
+  Future<void> playUrl(String url, String title, String sub, {String? backup}) async {
     error = null;
     _timing = null;
     _queue = [];
@@ -398,8 +400,17 @@ class AudioCtl extends ChangeNotifier {
       await player.stop();
       await player.setLoopMode(LoopMode.off);
       await player.setSpeed(AppSettings.I.speed);
-      await player.setAudioSource(AudioSource.uri(Uri.parse(url.replaceFirst('http://', 'https://')),
-          tag: MediaItem(id: '${_tagN++}:$url', title: sub, artist: title, album: 'المصحف الذكي')));
+      Future<void> open(String u) => player
+          .setAudioSource(AudioSource.uri(Uri.parse(u.replaceFirst('http://', 'https://')),
+              tag: MediaItem(id: '${_tagN++}:$u', title: sub, artist: title, album: 'المصحف الذكي')))
+          .timeout(const Duration(seconds: 25));
+      try {
+        await open(url);
+      } catch (_) {
+        if (backup == null) rethrow;
+        await player.stop();
+        await open(backup);
+      }
       player.play();
     } catch (e) {
       error = 'تعذّر تشغيل التسجيل، تأكد من الاتصال بالإنترنت';

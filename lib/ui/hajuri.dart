@@ -142,7 +142,9 @@ class _LessonsScreen extends StatelessWidget {
             subtitle: mb > 0 ? Text('${ar(mb)} ميجابايت', style: const TextStyle(fontSize: 12)) : null,
             trailing: const Icon(Icons.play_circle_outline_rounded, color: kEmerald),
             onTap: () {
-              AudioCtl.I.playUrl(l['u'] as String, 'تفسير ابن كثير — الحجوري', '$name • الدرس ${ar(i + 1)}');
+              // the sheikh's site first; if it does not answer, the copy kept in the app's store
+              AudioCtl.I.playUrl(l['u'] as String, 'تفسير ابن كثير — الحجوري', '$name • الدرس ${ar(i + 1)}',
+                  backup: '$kStore/hajuri-tafsir-${(e['surah'] as int).toString().padLeft(3, '0')}/${l['id']}.mp3');
               toast(context, 'تشغيل الدرس ${ar(i + 1)}');
             },
           );
