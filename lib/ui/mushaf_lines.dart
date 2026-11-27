@@ -19,6 +19,10 @@ class MushafLinesPage extends StatefulWidget {
   /// Words marked by a teacher ("line:index"), drawn in red.
   final Set<String>? marks;
   final void Function(String key, LWord word)? onWordTap;
+  final void Function(LWord word)? onWordDoubleTap;
+
+  /// Recitation mode: words are hidden unless listed here (1 correct, 2 wrong, 3 shown as a hint).
+  final Map<String, int>? recite;
   final bool showInfo;
   const MushafLinesPage(
       {super.key,
@@ -27,6 +31,8 @@ class MushafLinesPage extends StatefulWidget {
       required this.onLongPress,
       this.marks,
       this.onWordTap,
+      this.onWordDoubleTap,
+      this.recite,
       this.showInfo = true});
   @override
   State<MushafLinesPage> createState() => _MushafLinesPageState();
@@ -153,6 +159,21 @@ class _MushafLinesPageState extends State<MushafLinesPage> {
               bgs[k] = kHighlightColors[hl[wd.g]!.clamp(0, kHighlightColors.length - 1)].withValues(alpha: 0.42);
             }
             if (wd.end && fgs[k] == col.text) fgs[k] = info;
+            if (widget.recite != null && !wd.end) {
+              final stt = widget.recite!['$i:$k'];
+              if (stt == null) {
+                fgs[k] = Colors.transparent;
+                bgs[k] = Colors.grey.withValues(alpha: 0.13);
+              } else if (stt == 2) {
+                fgs[k] = Colors.red.shade700;
+                bgs[k] = Colors.red.withValues(alpha: 0.14);
+              } else if (stt == 3) {
+                fgs[k] = const Color(0xFFB07A00);
+                bgs[k] = const Color(0xFFFFD970).withValues(alpha: 0.35);
+              } else {
+                bgs[k] = null;
+              }
+            }
           }
           final rad = Radius.circular(lineH * 0.22);
           for (var k = 0; k < n; k++) {
@@ -164,6 +185,7 @@ class _MushafLinesPageState extends State<MushafLinesPage> {
             kids.add(GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: widget.onWordTap == null ? null : () => widget.onWordTap!(key, wd),
+              onDoubleTap: (widget.onWordDoubleTap == null || wd.end) ? null : () => widget.onWordDoubleTap!(wd),
               onLongPress: () => widget.onLongPress(wd.g),
               child: Container(
                 height: lineH * 0.9,

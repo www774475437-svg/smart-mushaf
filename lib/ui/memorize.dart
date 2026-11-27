@@ -7,6 +7,8 @@ import '../services/audio.dart';
 import '../services/store.dart';
 import 'common.dart';
 import 'reader.dart';
+import 'tasmee.dart';
+import '../services/settings.dart';
 
 /// Matches the recited words to the expected words (longest common subsequence).
 List<bool> matchWords(List<String> expected, List<String> heard) {
@@ -95,6 +97,48 @@ class _MemorizeScreenState extends State<MemorizeScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        ListenableBuilder(
+          listenable: Listenable.merge([UserStore.I, AppSettings.I]),
+          builder: (context, _) {
+            final due = AppSettings.I.smartReview ? UserStore.I.dueReviews : const <int>[];
+            if (due.isEmpty) return const SizedBox.shrink();
+            return GroupCard(title: 'مراجعة اليوم', children: [
+              for (final d in due.take(6))
+                ListTile(
+                  leading: const IconSquare(Icons.event_repeat_rounded, Color(0xFF2E7D32)),
+                  title: Text('راجع سورة ${surahName(d)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('سمّعها ثم اختر النتيجة'),
+                  onTap: () => Navigator.of(context)
+                      .push(MaterialPageRoute(builder: (_) => TasmeeScreen(page: QuranData.I.surahPage(d)))),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'بلا أخطاء',
+                        icon: const Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32)),
+                        onPressed: () => UserStore.I.reviewed(d, true),
+                      ),
+                      IconButton(
+                        tooltip: 'أخطأت',
+                        icon: const Icon(Icons.cancel_rounded, color: Colors.red),
+                        onPressed: () => UserStore.I.reviewed(d, false),
+                      ),
+                    ],
+                  ),
+                ),
+            ]);
+          },
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54), backgroundColor: kEmerald),
+            onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => TasmeeScreen(page: QuranData.I.at(s, from).page))),
+            icon: const Icon(Icons.mic_rounded),
+            label: const Text('سمِّع داخل صفحة المصحف'),
+          ),
+        ),
         GroupCard(children: [
           ListTile(
             leading: const IconSquare(Icons.menu_book_rounded, kEmerald),

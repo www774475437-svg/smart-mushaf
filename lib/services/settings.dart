@@ -69,6 +69,9 @@ class AppSettings extends ChangeNotifier {
   String get quranFont => _p.getString('quranFont') ?? 'AmiriQuran';
   set quranFont(String v) => _set('quranFont', v);
 
+  bool get smartReview => _p.getBool('smartReview') ?? true;
+  set smartReview(bool v) => _set('smartReview', v);
+
   double get ttsRate => _p.getDouble('ttsRate') ?? 0.45;
   set ttsRate(double v) => _set('ttsRate', v);
 }

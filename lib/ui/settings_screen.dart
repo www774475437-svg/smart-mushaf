@@ -176,6 +176,15 @@ class SettingsScreen extends StatelessWidget {
                   onChanged: (v) => st.continueNext = v,
                 ),
               ]),
+              GroupCard(title: 'الحفظ والمراجعة', children: [
+                SwitchListTile(
+                  secondary: const IconSquare(Icons.event_repeat_rounded, Color(0xFF2E7D32)),
+                  title: const Text('المراجعة الذكية', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('يذكّرك بمراجعة السور التي حفظتها: بعد ٣ أيام، ثم أسبوع، ثم شهر'),
+                  value: st.smartReview,
+                  onChanged: (v) => st.smartReview = v,
+                ),
+              ]),
               GroupCard(title: 'التفسير والترجمة', children: [
                 GroupTile(
                   icon: Icons.lightbulb_rounded,

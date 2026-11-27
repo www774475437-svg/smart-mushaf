@@ -11,7 +11,7 @@ import '../services/settings.dart';
 import '../services/store.dart';
 import '../services/tts.dart';
 import 'common.dart';
-import 'memorize.dart';
+import 'tasmee.dart';
 import 'reciter_sheet.dart';
 import 'reciters_screen.dart';
 import 'share_image.dart';
@@ -230,11 +230,10 @@ class _AyahSheetState extends State<AyahSheet> {
                 children: [
                   ListTile(
                     leading: const Icon(Icons.record_voice_over_rounded, color: kEmerald),
-                    title: const Text('سمّع من هذه الآية'),
+                    title: const Text('سمِّع هذه الصفحة'),
                     onTap: () {
                       Navigator.pop(ctx);
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => VoiceTestScreen(fromG: g, toG: QuranData.I.surahEndG(ay.s))));
+                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => TasmeeScreen(page: ay.page)));
                     },
                   ),
                   const Divider(height: 1, indent: 56),

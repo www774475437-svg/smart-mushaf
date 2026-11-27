@@ -17,6 +17,8 @@ import 'common.dart';
 import 'mushaf_lines.dart';
 import 'reciter_sheet.dart';
 import 'search.dart';
+import 'tasmee.dart';
+import '../data/tafsir.dart';
 
 const _basmala = 'بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ';
 
@@ -58,9 +60,7 @@ class _MushafScreenState extends State<MushafScreen> {
     AudioCtl.I.addListener(_onAudio);
     WidgetsBinding.instance.addPostFrameCallback((_) => UserStore.I.setLastPage(page));
     if (AppSettings.I.keepAwake) WakelockPlus.enable();
-    Timer(const Duration(seconds: 3), () {
-      if (mounted && bars && !autoOn) setState(() => bars = false);
-    });
+    _armHide();
     if (widget.flashG != null) {
       Timer(const Duration(seconds: 3), () {
         if (mounted && selectedG == widget.flashG) setState(() => selectedG = null);
@@ -71,11 +71,54 @@ class _MushafScreenState extends State<MushafScreen> {
   @override
   void dispose() {
     _autoTimer?.cancel();
+    _hideTimer?.cancel();
     _ipl.itemPositions.removeListener(_onPos);
     AudioCtl.I.removeListener(_onAudio);
     WakelockPlus.disable();
     _pc.dispose();
     super.dispose();
+  }
+
+  Timer? _hideTimer;
+
+  /// The bars and the player leave by themselves after five quiet seconds.
+  void _armHide() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted && bars) setState(() => bars = false);
+    });
+  }
+
+  void _wordMeaning(LWord w) {
+    final ay = QuranData.I.ayahs[w.g];
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(w.t, textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'UthmanicHafs', fontSize: 34, height: 1.8)),
+              Text(ay.ref, textAlign: TextAlign.center, style: const TextStyle(color: kGoldDeep)),
+              const SizedBox(height: 12),
+              const Text('معنى الآية (التفسير الميسر)', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              FutureBuilder<String>(
+                future: TafsirService.I.get('muyassar', w.g),
+                builder: (c, snap) => Text(snap.data ?? '…', style: const TextStyle(fontSize: 16, height: 1.85)),
+              ),
+              const SizedBox(height: 10),
+              const Text('معنى الكلمة المفردة يُضاف من كتاب في غريب القرآن عند توفّر نصّه.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _setPage(int p) {
@@ -217,7 +260,10 @@ class _MushafScreenState extends State<MushafScreen> {
         _builtScroll = scroll;
         return Scaffold(
           backgroundColor: col.bg,
-          body: Stack(
+          body: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (_) => _armHide(),
+            child: Stack(
             children: [
               Positioned.fill(
                 child: GestureDetector(
@@ -229,6 +275,7 @@ class _MushafScreenState extends State<MushafScreen> {
               _topBar(col),
               Positioned(left: 0, right: 0, bottom: 0, child: _bottomArea(col)),
             ],
+          ),
           ),
         );
       },
@@ -244,7 +291,7 @@ class _MushafScreenState extends State<MushafScreen> {
       allowImplicitScrolling: true,
       physics: const PageScrollPhysics(parent: BouncingScrollPhysics()),
       itemBuilder: (_, i) => RepaintBoundary(
-          child: MushafPage(page: i + 1, expand: true, selectedG: selectedG, onLongPress: _openAyah)),
+          child: MushafPage(page: i + 1, expand: true, selectedG: selectedG, onLongPress: _openAyah, onWordDoubleTap: _wordMeaning)),
     );
   }
 
@@ -256,7 +303,7 @@ class _MushafScreenState extends State<MushafScreen> {
       itemScrollController: _isc,
       itemPositionsListener: _ipl,
       scrollOffsetController: _soc,
-      itemBuilder: (_, i) => MushafPage(page: i + 1, expand: false, selectedG: selectedG, onLongPress: _openAyah),
+      itemBuilder: (_, i) => MushafPage(page: i + 1, expand: false, selectedG: selectedG, onLongPress: _openAyah, onWordDoubleTap: _wordMeaning),
     );
   }
 
@@ -300,6 +347,15 @@ class _MushafScreenState extends State<MushafScreen> {
                           color: ic,
                           onPressed: () =>
                               Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchScreen())),
+                        ),
+                        IconButton(
+                          tooltip: 'سمِّع هذه الصفحة',
+                          icon: const Icon(Icons.mic_none_rounded),
+                          color: ic,
+                          onPressed: () {
+                            AudioCtl.I.stop();
+                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => TasmeeScreen(page: page)));
+                          },
                         ),
                         const Spacer(),
                         IconButton(
@@ -453,7 +509,9 @@ class MushafPage extends StatefulWidget {
   final bool expand;
   final int? selectedG;
   final void Function(int g) onLongPress;
-  const MushafPage({super.key, required this.page, required this.expand, this.selectedG, required this.onLongPress});
+  final void Function(LWord w)? onWordDoubleTap;
+  const MushafPage(
+      {super.key, required this.page, required this.expand, this.selectedG, required this.onLongPress, this.onWordDoubleTap});
   @override
   State<MushafPage> createState() => _MushafPageState();
 }
@@ -482,7 +540,11 @@ class _MushafPageState extends State<MushafPage> {
 
   Widget _build(BuildContext context) {
     if (MushafLayout.I.ready && quranFont() == 'UthmanicHafs') {
-      final pg = MushafLinesPage(page: widget.page, selectedG: widget.selectedG, onLongPress: widget.onLongPress);
+      final pg = MushafLinesPage(
+          page: widget.page,
+          selectedG: widget.selectedG,
+          onLongPress: widget.onLongPress,
+          onWordDoubleTap: widget.onWordDoubleTap);
       if (widget.expand) return pg;
       // vertical scrolling: the very same page, one screen tall
       final mq = MediaQuery.of(context);
@@ -833,6 +895,32 @@ Future<void> showReadingOptions(BuildContext context, {VoidCallback? onAutoChang
                     onAutoChanged?.call();
                   },
                 ),
+                const Text('مؤقّت النوم (إيقاف التلاوة بعد)', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                ListenableBuilder(
+                  listenable: AudioCtl.I,
+                  builder: (c, _) {
+                    final at = AudioCtl.I.sleepAt;
+                    final left = at == null ? 0 : at.difference(DateTime.now()).inMinutes + 1;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Pills<int>(
+                          values: const [0, 15, 30, 60],
+                          selected: at == null ? 0 : -1,
+                          label: (m) => m == 0 ? 'بلا مؤقّت' : '${ar(m)} دقيقة',
+                          onChanged: (m) => AudioCtl.I.setSleep(m),
+                        ),
+                        if (at != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text('تتوقف التلاوة بعد ${ar(left)} دقيقة', style: const TextStyle(color: kGoldDeep)),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('إطار الصفحة'),

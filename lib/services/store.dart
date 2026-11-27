@@ -35,6 +35,34 @@ class UserStore extends ChangeNotifier {
   Map<int, int> highlights = {};
   List<Mistake> mistakes = [];
   Set<int> memorized = {};
+
+  /// Smart review of memorized surahs: surah -> [stage, due day number].
+  Map<int, List<int>> review = {};
+  static const List<int> reviewSteps = [3, 7, 30, 60];
+  static int dayNumber([DateTime? d]) {
+    final x = d ?? DateTime.now();
+    return DateTime.utc(x.year, x.month, x.day).millisecondsSinceEpoch ~/ 86400000;
+  }
+
+  /// Surahs whose review is due today (or overdue).
+  List<int> get dueReviews {
+    final t = dayNumber();
+    final l = review.entries.where((e) => memorized.contains(e.key) && e.value[1] <= t).map((e) => e.key).toList();
+    l.sort((a, b) => review[a]![1].compareTo(review[b]![1]));
+    return l;
+  }
+
+  /// [clean] true: recited without mistakes -> the next review moves further away.
+  void reviewed(int s, bool clean) {
+    final cur = review[s] ?? [0, dayNumber()];
+    if (clean) {
+      final st = (cur[0] + 1).clamp(0, reviewSteps.length - 1);
+      review[s] = [st, dayNumber() + reviewSteps[st]];
+    } else {
+      review[s] = [0, dayNumber() + 1];
+    }
+    _save();
+  }
   int khatmaDays = 0;
   int khatmaStart = 0;
   Set<int> khatmaDone = {};
@@ -60,6 +88,8 @@ class UserStore extends ChangeNotifier {
         highlights = h.map((k, v) => MapEntry(int.parse(k), v as int));
         mistakes = (m['m'] as List? ?? []).map((e) => Mistake.fromJson(e as Map<String, dynamic>)).toList();
         memorized = Set<int>.from((m['mem'] as List? ?? []).map((e) => e as int));
+        final rv = m['rv'] as Map<String, dynamic>? ?? {};
+        review = rv.map((k, v) => MapEntry(int.parse(k), List<int>.from(v as List)));
         khatmaDays = m['kd'] as int? ?? 0;
         khatmaStart = m['ks'] as int? ?? 0;
         khatmaDone = Set<int>.from((m['kdn'] as List? ?? []).map((e) => e as int));
@@ -83,6 +113,7 @@ class UserStore extends ChangeNotifier {
           'h': highlights.map((k, v) => MapEntry(k.toString(), v)),
           'm': mistakes.map((e) => e.toJson()).toList(),
           'mem': memorized.toList(),
+          'rv': review.map((k, v) => MapEntry(k.toString(), v)),
           'kd': khatmaDays,
           'ks': khatmaStart,
           'kdn': khatmaDone.toList(),
@@ -210,7 +241,12 @@ class UserStore extends ChangeNotifier {
 
   // Memorized surahs
   void toggleMemorized(int s) {
-    if (!memorized.remove(s)) memorized.add(s);
+    if (!memorized.remove(s)) {
+      memorized.add(s);
+      review[s] = [0, dayNumber() + reviewSteps[0]];
+    } else {
+      review.remove(s);
+    }
     _save();
   }
 

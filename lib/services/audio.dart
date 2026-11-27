@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -412,6 +413,23 @@ class AudioCtl extends ChangeNotifier {
         playSurah(s);
       }
     }
+  }
+
+  Timer? _sleep;
+  DateTime? sleepAt;
+
+  /// Stops the recitation after [minutes] (0 cancels).
+  void setSleep(int minutes) {
+    _sleep?.cancel();
+    sleepAt = null;
+    if (minutes > 0) {
+      sleepAt = DateTime.now().add(Duration(minutes: minutes));
+      _sleep = Timer(Duration(minutes: minutes), () {
+        sleepAt = null;
+        stop();
+      });
+    }
+    notifyListeners();
   }
 
   bool get looping => player.loopMode != LoopMode.off || _loopFromMs != null;
