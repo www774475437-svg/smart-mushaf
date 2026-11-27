@@ -55,6 +55,13 @@ class MushafLayout {
       }
     });
   }
+  /// Loads the fonts of the pages around [page] one after another, while the reader is still.
+  Future<void> preload(int page) async {
+    for (final p in [page, page + 1, page - 1, page + 2, page + 3, page - 2]) {
+      await ensureFont(p);
+    }
+  }
+
   String basmala = '';
 
   /// The calligraphic basmala as glyphs of the page-1 font.

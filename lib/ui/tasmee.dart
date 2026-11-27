@@ -28,13 +28,43 @@ int _lev(String a, String b) {
   return prev[n];
 }
 
+int _levFull(String a, String b) {
+  var prev = List<int>.generate(b.length + 1, (i) => i);
+  for (var i = 1; i <= a.length; i++) {
+    final cur = List<int>.filled(b.length + 1, 0);
+    cur[0] = i;
+    for (var j = 1; j <= b.length; j++) {
+      final c = a.codeUnitAt(i - 1) == b.codeUnitAt(j - 1) ? 0 : 1;
+      var v = prev[j - 1] + c;
+      if (prev[j] + 1 < v) v = prev[j] + 1;
+      if (cur[j - 1] + 1 < v) v = cur[j - 1] + 1;
+      cur[j] = v;
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+final RegExp _weak = RegExp('[اويء]');
+
 /// Is the heard word the expected word? (forgiving of how speech engines spell)
 bool sameWord(String heard, String expected) {
   if (heard == expected) return true;
-  String strip(String w) => w.startsWith('و') && w.length > 3 ? w.substring(1) : w;
-  if (strip(heard) == strip(expected)) return true;
+  String strip(String w) => (w.startsWith('و') || w.startsWith('ف')) && w.length > 3 ? w.substring(1) : w;
+  final h = strip(heard), e = strip(expected);
+  if (h == e) return true;
   if (expected.length >= 4 && _lev(heard, expected) <= 1) return true;
+  // the mushaf spelling and the everyday spelling differ mostly in the long vowels
+  final a = h.replaceAll(_weak, ''), b = e.replaceAll(_weak, '');
+  if (a.length >= 3 && a == b) return true;
   return false;
+}
+
+/// A heard word that is near enough to count as an attempt at the expected word.
+bool nearWord(String heard, String expected) {
+  if (sameWord(heard, expected)) return true;
+  final lim = expected.length <= 3 ? 1 : (expected.length <= 6 ? 2 : 3);
+  return _levFull(heard, expected) <= lim;
 }
 
 class _W {
@@ -62,7 +92,8 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   bool ready = false;
   bool on = false; // the user wants listening
   bool listening = false;
-  int _done = 0; // heard words already handled in this listening session
+  int _from = 0, _lastLen = 0, _baseIdx = 0;
+  Map<String, int> _baseState = {};
   String heard = '';
   String? err;
   bool peekAll = false;
@@ -85,7 +116,10 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     words = [];
     state.clear();
     idx = 0;
-    _done = 0;
+    _from = 0;
+    _lastLen = 0;
+    _baseIdx = 0;
+    _baseState = {};
     heard = '';
     peekAll = false;
     if (!MushafLayout.I.ready) return;
@@ -182,7 +216,9 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   }
 
   Future<void> _listen() async {
-    _done = 0;
+    _from = 0;
+    _lastLen = 0;
+    _rebase();
     if (mounted) setState(() => listening = true);
     try {
       await _stt.listen(
@@ -200,29 +236,107 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     }
   }
 
-  void _consume(List<String> hs) {
-    if (hs.length < _done) _done = 0;
-    for (var i = _done; i < hs.length; i++) {
-      if (idx >= words.length) break;
-      final h = hs[i];
-      if (sameWord(h, words[idx].norm)) {
-        state[words[idx].key] ??= 1;
-        idx++;
-      } else if (idx + 1 < words.length && sameWord(h, words[idx + 1].norm)) {
-        state[words[idx].key] = 2; // skipped a word
-        state[words[idx + 1].key] ??= 1;
-        idx += 2;
-      } else if (idx + 2 < words.length && sameWord(h, words[idx + 2].norm)) {
-        state[words[idx].key] = 2;
-        state[words[idx + 1].key] = 2;
-        state[words[idx + 2].key] ??= 1;
-        idx += 3;
-      }
+  /// Follows the recitation. The whole transcript of this listening session is matched
+  /// again on every result, so a word the engine corrects later is corrected here too.
+  void _consume(List<String> heardWords) {
+    if (heardWords.length < _from) {
+      // the engine started a new transcript
+      _from = 0;
+      _rebase();
     }
-    // keep the last heard word open: the engine may still correct it
-    _done = hs.isEmpty ? 0 : hs.length - 1;
+    _lastLen = heardWords.length;
+    final hs = List<String>.of(heardWords);
+    var i = _baseIdx;
+    final st = Map<String, int>.of(_baseState);
+    final missed = <String>[]; // heard words that matched nothing since the last match
+    bool m(int hj, int wi) => hj < hs.length && wi < words.length && sameWord(hs[hj], words[wi].norm);
+    void ok(int wi) => st[words[wi].key] ??= 1;
+    var j = _from;
+    while (j < hs.length && i < words.length) {
+      final h = hs[j];
+      final e = words[i].norm;
+      if (sameWord(h, e)) {
+        ok(i);
+        i++;
+        j++;
+        missed.clear();
+        continue;
+      }
+      // the engine glued two words together
+      if (e.length >= 2 && h.length > e.length + 1 && h.startsWith(e)) {
+        ok(i);
+        i++;
+        hs[j] = h.substring(e.length);
+        missed.clear();
+        continue;
+      }
+      if (e.length >= 3 && h.length > e.length + 1 && h.endsWith(e)) {
+        ok(i);
+        i++;
+        j++;
+        missed.clear();
+        continue;
+      }
+      // one word of the mushaf heard as two
+      if (j + 1 < hs.length && sameWord(h + hs[j + 1], e)) {
+        ok(i);
+        i++;
+        j += 2;
+        missed.clear();
+        continue;
+      }
+      // two words of the mushaf heard as one
+      if (i + 1 < words.length && sameWord(h, e + words[i + 1].norm)) {
+        ok(i);
+        ok(i + 1);
+        i += 2;
+        j++;
+        missed.clear();
+        continue;
+      }
+      // A word counts as skipped only when the words after it are then heard in order.
+      var jumped = false;
+      for (var k = 1; k <= 4 && !jumped; k++) {
+        if (i + k >= words.length) break;
+        final need = k + 2;
+        var got = 0;
+        var end = false;
+        for (var r = 0; r < need; r++) {
+          if (i + k + r >= words.length) {
+            end = true;
+            break;
+          }
+          if (!m(j + r, i + k + r)) break;
+          got++;
+        }
+        if (got == need || (end && got >= 2)) {
+          for (var x = 0; x < k; x++) {
+            final w = words[i + x];
+            // he said something close to it: the engine misheard, not a mistake
+            final tried = missed.any((u) => nearWord(u, w.norm));
+            if (st[w.key] == null || st[w.key] == 2) st[w.key] = tried ? 1 : 2;
+          }
+          i += k;
+          missed.clear();
+          jumped = true;
+        }
+      }
+      if (jumped) continue;
+      missed.add(h);
+      j++;
+    }
+    if (i < idx) return; // never step back
+    idx = i;
+    state
+      ..clear()
+      ..addAll(st);
     setState(() {});
     if (idx >= words.length && words.isNotEmpty) _pageDone();
+  }
+
+  void _rebase() {
+    _baseIdx = idx;
+    _baseState = Map<String, int>.of(state);
   }
 
   void _hint() {
@@ -231,6 +345,8 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
       state[words[idx].key] = 3;
       idx++;
     });
+    _from = _lastLen;
+    _rebase();
     if (idx >= words.length) _pageDone();
   }
 

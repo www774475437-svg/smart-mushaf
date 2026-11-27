@@ -49,11 +49,15 @@ class _MushafScreenState extends State<MushafScreen> {
   bool autoOn = false;
   bool autoPaused = false;
   int? _lastAudioG;
+  Timer? _saveTimer;
+  final Map<int, Widget> _pageCache = {};
+  int? _cacheSel;
 
   @override
   void initState() {
     super.initState();
     page = widget.page.clamp(1, 604);
+    MushafLayout.I.preload(page);
     selectedG = widget.flashG;
     _pc = PageController(initialPage: page - 1);
     _ipl.itemPositions.addListener(_onPos);
@@ -72,6 +76,11 @@ class _MushafScreenState extends State<MushafScreen> {
   void dispose() {
     _autoTimer?.cancel();
     _hideTimer?.cancel();
+    if (_saveTimer?.isActive ?? false) {
+      _saveTimer!.cancel();
+      final p = page;
+      Future.microtask(() => UserStore.I.setLastPage(p));
+    }
     _ipl.itemPositions.removeListener(_onPos);
     AudioCtl.I.removeListener(_onAudio);
     WakelockPlus.disable();
@@ -124,7 +133,13 @@ class _MushafScreenState extends State<MushafScreen> {
   void _setPage(int p) {
     if (p == page) return;
     setState(() => page = p);
-    UserStore.I.setLastPage(p);
+    // Saving and loading fonts wait until the page has settled, so the turn itself stays smooth.
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 450), () {
+      if (!mounted) return;
+      UserStore.I.setLastPage(page);
+      MushafLayout.I.preload(page);
+    });
   }
 
   void _onPos() {
@@ -283,6 +298,13 @@ class _MushafScreenState extends State<MushafScreen> {
   }
 
   Widget _pageView() {
+    // The same page widget is handed back while nothing in it changed, so showing the bars
+    // or moving to the next page does not rebuild the pages on screen.
+    if (_cacheSel != selectedG) {
+      _pageCache.clear();
+      _cacheSel = selectedG;
+    }
+    _pageCache.removeWhere((k, _) => (k + 1 - page).abs() > 3);
     return PageView.builder(
       key: const ValueKey('pages'),
       controller: _pc,
@@ -290,8 +312,11 @@ class _MushafScreenState extends State<MushafScreen> {
       onPageChanged: (i) => _setPage(i + 1),
       allowImplicitScrolling: true,
       physics: const PageScrollPhysics(parent: BouncingScrollPhysics()),
-      itemBuilder: (_, i) => RepaintBoundary(
-          child: MushafPage(page: i + 1, expand: true, selectedG: selectedG, onLongPress: _openAyah, onWordDoubleTap: _wordMeaning)),
+      itemBuilder: (_, i) => _pageCache.putIfAbsent(
+          i,
+          () => RepaintBoundary(
+              child: MushafPage(
+                  page: i + 1, expand: true, selectedG: selectedG, onLongPress: _openAyah, onWordDoubleTap: _wordMeaning))),
     );
   }
 
@@ -524,19 +549,63 @@ class _MushafPageState extends State<MushafPage> {
 
   @override
   void dispose() {
+    AppSettings.I.removeListener(_all);
+    AudioCtl.I.removeListener(_maybe);
+    UserStore.I.removeListener(_maybe);
     for (final r in _recs.values) {
       r.dispose();
     }
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: Listenable.merge([AppSettings.I, AudioCtl.I, UserStore.I]),
-      builder: (context, _) => _build(context),
-    );
+  String _last = '';
+
+  /// What this page shows from the audio and the user's marks. The page is rebuilt only
+  /// when this changes, not on every tick of the player or every save.
+  String _sig() {
+    final ids = QuranData.I.pageAyahs[widget.page];
+    final a = AudioCtl.I;
+    final g = a.active ? a.currentG : null;
+    final st = UserStore.I;
+    final b = StringBuffer(g != null && ids.contains(g) ? '$g' : '-');
+    for (final id in ids) {
+      final h = st.highlights[id];
+      if (h != null) b.write('|$id:$h');
+      if (st.isAyahBookmarked(id)) b.write('|b$id');
+      if (st.notes.containsKey(id)) b.write('|n$id');
+    }
+    if (st.isPageBookmarked(widget.page)) b.write('|pb');
+    return b.toString();
   }
+
+  void _all() {
+    if (mounted) setState(() {});
+  }
+
+  void _maybe() {
+    final s = _sig();
+    if (s == _last) return;
+    _last = s;
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _last = _sig();
+    AppSettings.I.addListener(_all);
+    AudioCtl.I.addListener(_maybe);
+    UserStore.I.addListener(_maybe);
+  }
+
+  @override
+  void didUpdateWidget(covariant MushafPage old) {
+    super.didUpdateWidget(old);
+    _last = _sig();
+  }
+
+  @override
+  Widget build(BuildContext context) => _build(context);
 
   Widget _build(BuildContext context) {
     if (MushafLayout.I.ready && quranFont() == 'UthmanicHafs') {

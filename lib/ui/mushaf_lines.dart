@@ -61,8 +61,6 @@ class _MushafLinesPageState extends State<MushafLinesPage> {
         if (ok && mounted) setState(() {});
       });
     }
-    l.ensureFont(widget.page + 1);
-    l.ensureFont(widget.page - 1);
   }
 
   /// Natural width of each line at font size 100.
