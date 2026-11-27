@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'quran.dart';
 
@@ -13,7 +14,14 @@ class TafsirSource {
   final String id, name, author;
   final String? cloud;
   final int? qcom;
-  const TafsirSource(this.id, this.name, this.author, {this.cloud, this.qcom});
+
+  /// Books of the downloadable library live in the repository's `library` branch.
+  final bool remote;
+  final String lang, langName, group;
+  const TafsirSource(this.id, this.name, this.author,
+      {this.cloud, this.qcom, this.remote = false, this.lang = 'ar', this.langName = 'العربية', this.group = 'tafsir'});
+  bool get rtl => const {'ar', 'ur', 'fa', 'ps', 'ug', 'ku'}.contains(lang);
+  String get title => lang == 'ar' ? name : '$name — $langName';
   bool get bundled => TafsirService.I.bundledIds.contains(id);
 }
 
@@ -27,6 +35,8 @@ const List<TafsirSource> kTafsirs = [
   TafsirSource('jalalayn', 'تفسير الجلالين', 'المحلي والسيوطي', cloud: 'ar.jalalayn'),
   TafsirSource('waseet', 'التفسير الوسيط', 'محمد سيد طنطاوي', cloud: 'ar.waseet', qcom: 93),
 ];
+
+const String kLibraryUrl = 'https://raw.githubusercontent.com/www774475437-svg/smart-mushaf/library';
 
 const String kGroupedNote = 'تفسير هذه الآية مذكور مع الآيات التي قبلها في هذا التفسير.';
 
@@ -60,6 +70,10 @@ class TafsirService {
   final Map<String, List<String>> _normFull = {};
   String _docs = '';
 
+  /// Extra tafsirs, word-meaning books and tafsirs in other languages, downloaded on request.
+  List<TafsirSource> library = [];
+  Set<String> downloaded = {};
+
   Future<void> init() async {
     try {
       final raw = await rootBundle.loadString('assets/data/tafsirs.json');
@@ -67,9 +81,50 @@ class TafsirService {
     } catch (_) {
       bundledIds = {};
     }
+    try {
+      final raw = await rootBundle.loadString('assets/gharib/library.json');
+      library = [
+        for (final e in (jsonDecode(raw) as List).cast<Map<String, dynamic>>())
+          TafsirSource(e['id'] as String, e['name'] as String, e['author'] as String,
+              remote: true, lang: e['lang'] as String, langName: e['langName'] as String, group: e['group'] as String),
+      ];
+    } catch (_) {}
+    try {
+      final p = await SharedPreferences.getInstance();
+      downloaded = (p.getStringList('libDownloaded') ?? const []).toSet();
+    } catch (_) {}
   }
 
-  TafsirSource byId(String id) => kTafsirs.firstWhere((t) => t.id == id, orElse: () => kTafsirs.first);
+  Future<void> _saveDownloaded() async {
+    try {
+      (await SharedPreferences.getInstance()).setStringList('libDownloaded', downloaded.toList());
+    } catch (_) {}
+  }
+
+  TafsirSource byId(String id) {
+    for (final t in kTafsirs) {
+      if (t.id == id) return t;
+    }
+    for (final t in library) {
+      if (t.id == id) return t;
+    }
+    return kTafsirs.first;
+  }
+
+  /// The tafsirs shown under an ayah: the ones inside the app, then the downloaded ones.
+  List<TafsirSource> get active => [...kTafsirs, ...library.where((t) => downloaded.contains(t.id))];
+
+  Future<File> _libFile(TafsirSource t) async => File('${await _dir()}/lib_${t.id}.json.gz');
+
+  Future<List<String>> _fetchLib(TafsirSource t) async {
+    final r = await http.get(Uri.parse('$kLibraryUrl/${t.id}.json.gz')).timeout(const Duration(minutes: 4));
+    if (r.statusCode != 200) throw Exception('http ${r.statusCode}');
+    final l = await compute(_decodeGz, r.bodyBytes);
+    try {
+      await (await _libFile(t)).writeAsBytes(r.bodyBytes);
+    } catch (_) {}
+    return l;
+  }
 
   Future<String> _dir() async {
     if (kIsWeb) throw UnsupportedError('web');
@@ -81,6 +136,7 @@ class TafsirService {
   Future<File> _partFile(TafsirSource t) async => File('${await _dir()}/tafsir_${t.id}_part.json');
 
   Future<bool> isAvailableOffline(TafsirSource t) async {
+    if (t.remote) return downloaded.contains(t.id);
     if (t.bundled || _full.containsKey(t.id)) return true;
     try {
       return await (await _fullFile(t)).exists();
@@ -91,6 +147,21 @@ class TafsirService {
 
   Future<List<String>?> fullList(TafsirSource t) async {
     if (_full.containsKey(t.id)) return _full[t.id];
+    if (t.remote) {
+      if (!downloaded.contains(t.id)) return null;
+      try {
+        final f = await _libFile(t);
+        if (await f.exists()) {
+          return _full[t.id] = await compute(_decodeGz, await f.readAsBytes());
+        }
+      } catch (_) {}
+      // the website keeps no files: read the book again from the library
+      try {
+        return _full[t.id] = await _fetchLib(t);
+      } catch (_) {
+        return null;
+      }
+    }
     if (t.bundled) {
       try {
         final data = await rootBundle.load('assets/data/tafsir_${t.id}.json.gz');
@@ -152,6 +223,7 @@ class TafsirService {
     final t = byId(id);
     final full = await fullList(t);
     if (full != null && g < full.length) return _resolve(full, g);
+    if (t.remote) throw Exception('not downloaded');
     final part = await _loadPart(t);
     if (part.containsKey(g)) return part[g]!;
     final ay = QuranData.I.ayahs[g];
@@ -189,6 +261,14 @@ class TafsirService {
   /// Downloads a whole tafsir so it works without internet (for ones not inside the app).
   Future<void> download(TafsirSource t, void Function(double p) onProgress) async {
     if (t.bundled) return;
+    if (t.remote) {
+      onProgress(0.2);
+      _full[t.id] = await _fetchLib(t);
+      downloaded.add(t.id);
+      await _saveDownloaded();
+      onProgress(1);
+      return;
+    }
     final out = List<String>.filled(6236, '');
     if (t.cloud != null) {
       onProgress(0.1);
@@ -246,6 +326,17 @@ class TafsirService {
 
   Future<void> remove(TafsirSource t) async {
     if (t.bundled) return;
+    if (t.remote) {
+      downloaded.remove(t.id);
+      await _saveDownloaded();
+      try {
+        final f = await _libFile(t);
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
+      _full.remove(t.id);
+      _normFull.remove(t.id);
+      return;
+    }
     try {
       final f = await _fullFile(t);
       if (await f.exists()) await f.delete();

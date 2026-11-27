@@ -1,0 +1,533 @@
+[
+{
+"id": "uthaymeen",
+"slug": "tafsir-ibn-uthaymeen",
+"name": "تفسير ابن عثيمين",
+"author": "محمد بن صالح العثيمين",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "mukhtasar",
+"slug": "ar-tafsir-al-mukhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير للدراسات القرآنية",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "jazairi",
+"slug": "abu-bakr-jabir-al-jazairi",
+"name": "أيسر التفاسير",
+"author": "أبو بكر الجزائري",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "adwa",
+"slug": "adwa-al-bayan",
+"name": "أضواء البيان",
+"author": "محمد الأمين الشنقيطي",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "ibnqayyim",
+"slug": "tafsir-ibn-al-qayyim",
+"name": "تفسير ابن القيم",
+"author": "ابن قيم الجوزية",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "shawkani",
+"slug": "fath-al-qadir-al-shawkani",
+"name": "فتح القدير",
+"author": "محمد بن علي الشوكاني",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "ibnjawzi",
+"slug": "tafsir-ibn-al-jawzi",
+"name": "زاد المسير",
+"author": "ابن الجوزي",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "ibnabihatim",
+"slug": "tafsir-ibn-abi-hatim",
+"name": "تفسير ابن أبي حاتم",
+"author": "ابن أبي حاتم الرازي",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "durr",
+"slug": "al-durr-al-manthur",
+"name": "الدر المنثور",
+"author": "جلال الدين السيوطي",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "mathoor",
+"slug": "mawsoo-at-al-tafsir-al-ma-thoor",
+"name": "موسوعة التفسير المأثور",
+"author": "مركز الدراسات والمعلومات القرآنية",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "samani",
+"slug": "tafsir-al-sam-ani",
+"name": "تفسير السمعاني",
+"author": "أبو المظفر السمعاني",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "zamanin",
+"slug": "tafsir-ibn-abi-zamanin",
+"name": "تفسير ابن أبي زمنين",
+"author": "ابن أبي زمنين",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "qasimi",
+"slug": "mahasin-al-ta-wil-al-qasimi",
+"name": "محاسن التأويل",
+"author": "جمال الدين القاسمي",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "qanuji",
+"slug": "fath-al-bayan-li-al-qanuji",
+"name": "فتح البيان",
+"author": "صديق حسن خان القنوجي",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "tadabbur",
+"slug": "tadabbur-wa-amal",
+"name": "تدبر وعمل",
+"author": "شركة الخبرات الذكية",
+"lang": "ar",
+"langName": "العربية",
+"group": "tafsir"
+},
+{
+"id": "gharib",
+"slug": "al-muyassar-fi-al-gharib",
+"name": "الميسر في غريب القرآن",
+"author": "مجمع الملك فهد",
+"lang": "ar",
+"langName": "العربية",
+"group": "lugha"
+},
+{
+"id": "siraj",
+"slug": "asseraj-fi-bayan-gharib-alquran",
+"name": "السراج في بيان غريب القرآن",
+"author": "محمد الخضيري",
+"lang": "ar",
+"langName": "العربية",
+"group": "lugha"
+},
+{
+"id": "irab",
+"slug": "al-i-rab-al-muyassar",
+"name": "الإعراب الميسر",
+"author": "شركة الدار العربية",
+"lang": "ar",
+"langName": "العربية",
+"group": "lugha"
+},
+{
+"id": "mk_en",
+"slug": "en-tafsir-al-mukhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "en",
+"langName": "الإنجليزية",
+"group": "lang"
+},
+{
+"id": "mk_fr",
+"slug": "french-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "fr",
+"langName": "الفرنسية",
+"group": "lang"
+},
+{
+"id": "mk_es",
+"slug": "spanish-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "es",
+"langName": "الإسبانية",
+"group": "lang"
+},
+{
+"id": "mk_tr",
+"slug": "turkish-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "tr",
+"langName": "التركية",
+"group": "lang"
+},
+{
+"id": "mk_id",
+"slug": "indonesian-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "id",
+"langName": "الإندونيسية",
+"group": "lang"
+},
+{
+"id": "mk_ru",
+"slug": "russian-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "ru",
+"langName": "الروسية",
+"group": "lang"
+},
+{
+"id": "mk_bn",
+"slug": "bengali-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "bn",
+"langName": "البنغالية",
+"group": "lang"
+},
+{
+"id": "mk_bs",
+"slug": "bosnian-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "bs",
+"langName": "البوسنية",
+"group": "lang"
+},
+{
+"id": "mk_fa",
+"slug": "persian-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "fa",
+"langName": "الفارسية",
+"group": "lang"
+},
+{
+"id": "mk_zh",
+"slug": "chinese-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "zh",
+"langName": "الصينية",
+"group": "lang"
+},
+{
+"id": "mk_ja",
+"slug": "japanese-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "ja",
+"langName": "اليابانية",
+"group": "lang"
+},
+{
+"id": "mk_it",
+"slug": "italian-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "it",
+"langName": "الإيطالية",
+"group": "lang"
+},
+{
+"id": "mk_tl",
+"slug": "tagalog-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "tl",
+"langName": "الفلبينية",
+"group": "lang"
+},
+{
+"id": "mk_vi",
+"slug": "vietnamese-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "vi",
+"langName": "الفيتنامية",
+"group": "lang"
+},
+{
+"id": "mk_hi",
+"slug": "hindi-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "hi",
+"langName": "الهندية",
+"group": "lang"
+},
+{
+"id": "mk_ps",
+"slug": "pashto-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "ps",
+"langName": "البشتو",
+"group": "lang"
+},
+{
+"id": "mk_uz",
+"slug": "uzbek-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "uz",
+"langName": "الأوزبكية",
+"group": "lang"
+},
+{
+"id": "mk_ky",
+"slug": "kyrgyz-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "ky",
+"langName": "القيرغيزية",
+"group": "lang"
+},
+{
+"id": "mk_az",
+"slug": "azeri-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "az",
+"langName": "الأذرية",
+"group": "lang"
+},
+{
+"id": "mk_ku",
+"slug": "kurdish-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "ku",
+"langName": "الكردية",
+"group": "lang"
+},
+{
+"id": "mk_sr",
+"slug": "serbian-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "sr",
+"langName": "الصربية",
+"group": "lang"
+},
+{
+"id": "mk_ta",
+"slug": "tamil-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "ta",
+"langName": "التاميلية",
+"group": "lang"
+},
+{
+"id": "mk_te",
+"slug": "telugu-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "te",
+"langName": "التيلوغو",
+"group": "lang"
+},
+{
+"id": "mk_th",
+"slug": "thai-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "th",
+"langName": "التايلندية",
+"group": "lang"
+},
+{
+"id": "mk_ug",
+"slug": "uyghur-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "ug",
+"langName": "الأويغورية",
+"group": "lang"
+},
+{
+"id": "mk_ml",
+"slug": "malayalam-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "ml",
+"langName": "المليبارية",
+"group": "lang"
+},
+{
+"id": "mk_as",
+"slug": "assamese-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "as",
+"langName": "الآسامية",
+"group": "lang"
+},
+{
+"id": "mk_km",
+"slug": "khmer-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "km",
+"langName": "الخميرية",
+"group": "lang"
+},
+{
+"id": "mk_si",
+"slug": "sinhalese-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "si",
+"langName": "السنهالية",
+"group": "lang"
+},
+{
+"id": "mk_ff",
+"slug": "fulani-mokhtasar",
+"name": "المختصر في التفسير",
+"author": "مركز تفسير",
+"lang": "ff",
+"langName": "الفولانية",
+"group": "lang"
+},
+{
+"id": "sa_ru",
+"slug": "tafsir-as-saadi-russian",
+"name": "تفسير السعدي",
+"author": "عبد الرحمن السعدي",
+"lang": "ru",
+"langName": "الروسية",
+"group": "lang"
+},
+{
+"id": "sa_ur",
+"slug": "ur-tafsir-as-saadi-urdu",
+"name": "تفسير السعدي",
+"author": "عبد الرحمن السعدي",
+"lang": "ur",
+"langName": "الأردية",
+"group": "lang"
+},
+{
+"id": "sa_id",
+"slug": "id-tafsir-as-saadi",
+"name": "تفسير السعدي",
+"author": "عبد الرحمن السعدي",
+"lang": "id",
+"langName": "الإندونيسية",
+"group": "lang"
+},
+{
+"id": "sa_tr",
+"slug": "turkish-tafsir-as-saadi-turkish",
+"name": "تفسير السعدي",
+"author": "عبد الرحمن السعدي",
+"lang": "tr",
+"langName": "التركية",
+"group": "lang"
+},
+{
+"id": "sa_fa",
+"slug": "fr-tafsir-as-saadi",
+"name": "تفسير السعدي",
+"author": "عبد الرحمن السعدي",
+"lang": "fa",
+"langName": "الفارسية",
+"group": "lang"
+},
+{
+"id": "sa_sq",
+"slug": "sq-saadi",
+"name": "تفسير السعدي",
+"author": "عبد الرحمن السعدي",
+"lang": "sq",
+"langName": "الألبانية",
+"group": "lang"
+},
+{
+"id": "ik_en",
+"slug": "en-tafisr-ibn-kathir",
+"name": "تفسير ابن كثير",
+"author": "ابن كثير",
+"lang": "en",
+"langName": "الإنجليزية",
+"group": "lang"
+},
+{
+"id": "ik_ur",
+"slug": "ur-tafseer-ibn-e-kaseer",
+"name": "تفسير ابن كثير",
+"author": "ابن كثير",
+"lang": "ur",
+"langName": "الأردية",
+"group": "lang"
+},
+{
+"id": "ik_bn",
+"slug": "bn-tafseer-ibn-e-kaseer",
+"name": "تفسير ابن كثير",
+"author": "ابن كثير",
+"lang": "bn",
+"langName": "البنغالية",
+"group": "lang"
+},
+{
+"id": "ik_ru",
+"slug": "ru-tafsir-ibne-kahtir",
+"name": "تفسير ابن كثير",
+"author": "ابن كثير",
+"lang": "ru",
+"langName": "الروسية",
+"group": "lang"
+},
+{
+"id": "ik_tr",
+"slug": "tr-tafsir-ibne-kathir",
+"name": "تفسير ابن كثير",
+"author": "ابن كثير",
+"lang": "tr",
+"langName": "التركية",
+"group": "lang"
+}
+]

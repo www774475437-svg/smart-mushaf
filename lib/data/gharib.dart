@@ -38,6 +38,18 @@ class Gharib {
     } catch (_) {}
   }
 
+  List<dynamic>? _short;
+
+  /// The hard words of the ayah from «الميسر في غريب القرآن» (مجمع الملك فهد).
+  Future<String> ayahGharib(int g) async {
+    try {
+      _short ??= await _gz('assets/gharib/muyassar_gharib.json.gz') as List;
+      return g < _short!.length ? _short![g] as String : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
   /// The place of a word of the page inside its ayah (0 for the first word).
   int indexOf(LWord w) {
     final lay = MushafLayout.I;

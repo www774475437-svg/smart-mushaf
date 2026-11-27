@@ -348,7 +348,7 @@ class _TafsirsScreenState extends State<TafsirsScreen> {
   }
 
   Future<void> _check() async {
-    for (final t in kTafsirs) {
+    for (final t in [...kTafsirs, ...TafsirService.I.library]) {
       have[t.id] = await TafsirService.I.isAvailableOffline(t);
     }
     if (mounted) setState(() {});
@@ -361,53 +361,80 @@ class _TafsirsScreenState extends State<TafsirsScreen> {
         if (mounted) setState(() => prog[t.id] = p);
       });
       have[t.id] = true;
-      if (mounted) toast(context, 'حُمّل ${t.name}');
+      if (mounted) toast(context, 'حُمّل ${t.title}');
     } catch (_) {
       if (mounted) toast(context, 'تعذّر التحميل، تأكد من الإنترنت');
     }
     if (mounted) setState(() => prog.remove(t.id));
   }
 
+  Widget _row(TafsirSource t, {String? title}) {
+    final cur = AppSettings.I.tafsirId;
+    final ok = t.bundled || have[t.id] == true;
+    return ListTile(
+      leading: Icon(
+          cur == t.id
+              ? Icons.radio_button_checked_rounded
+              : (ok || !t.remote ? Icons.radio_button_off_rounded : Icons.cloud_download_outlined),
+          color: ok || !t.remote ? kEmerald : Colors.grey),
+      title: Text(title ?? t.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(
+          '${t.author} • ${t.bundled ? 'داخل التطبيق' : have[t.id] == true ? 'محمّل' : t.remote ? 'اضغط للتحميل' : 'يعمل بالإنترنت'}',
+          style: const TextStyle(fontSize: 12.5)),
+      onTap: () {
+        if (t.remote && !ok) {
+          if (!prog.containsKey(t.id)) _download(t);
+          return;
+        }
+        AppSettings.I.tafsirId = t.id;
+        setState(() {});
+      },
+      trailing: t.bundled
+          ? null
+          : prog.containsKey(t.id)
+              ? const SizedBox(width: 26, height: 26, child: CircularProgressIndicator(strokeWidth: 3))
+              : have[t.id] == true
+                  ? IconButton(
+                      tooltip: 'حذف',
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      onPressed: () async {
+                        await TafsirService.I.remove(t);
+                        have[t.id] = false;
+                        if (AppSettings.I.tafsirId == t.id) AppSettings.I.tafsirId = 'muyassar';
+                        if (mounted) setState(() {});
+                      },
+                    )
+                  : IconButton(
+                      tooltip: 'تحميل', icon: const Icon(Icons.download_rounded, color: kGoldDeep), onPressed: () => _download(t)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final cur = AppSettings.I.tafsirId;
+    final lib = TafsirService.I.library;
+    final langs = <String, List<TafsirSource>>{};
+    for (final t in lib.where((t) => t.group == 'lang')) {
+      (langs[t.langName] ??= []).add(t);
+    }
+    final names = langs.keys.toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('التفاسير')),
+      appBar: AppBar(title: const Text('المكتبة والتفاسير')),
       body: ListView(
+        padding: const EdgeInsets.only(bottom: 30),
         children: [
           const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('اختر التفسير الافتراضي، وحمّل ما تريد ليعمل بدون إنترنت.', style: TextStyle(height: 1.7)),
+            padding: EdgeInsets.fromLTRB(22, 14, 22, 4),
+            child: Text('اختر التفسير الأول، وحمّل ما تريد من الكتب فيظهر تحت كل آية ويعمل بلا إنترنت.',
+                style: TextStyle(height: 1.7)),
           ),
-          for (final t in kTafsirs)
-            ListTile(
-              leading: Icon(cur == t.id ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                  color: kEmerald),
-              title: Text(t.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text('${t.author} • ${t.bundled ? 'مدمج في التطبيق' : have[t.id] == true ? 'محمّل' : 'يعمل بالإنترنت'}'),
-              onTap: () {
-                AppSettings.I.tafsirId = t.id;
-                setState(() {});
-              },
-              trailing: t.bundled
-                  ? null
-                  : prog.containsKey(t.id)
-                      ? SizedBox(
-                          width: 26,
-                          height: 26,
-                          child: CircularProgressIndicator(value: prog[t.id], strokeWidth: 3),
-                        )
-                      : have[t.id] == true
-                          ? IconButton(
-                              icon: const Icon(Icons.delete_outline_rounded),
-                              onPressed: () async {
-                                await TafsirService.I.remove(t);
-                                have[t.id] = false;
-                                if (mounted) setState(() {});
-                              },
-                            )
-                          : IconButton(icon: const Icon(Icons.download_rounded), onPressed: () => _download(t)),
-            ),
+          GroupCard(title: 'داخل التطبيق', children: [for (final t in kTafsirs) _row(t)]),
+          GroupCard(title: 'تفاسير للتحميل', children: [for (final t in lib.where((t) => t.group == 'tafsir')) _row(t)]),
+          GroupCard(title: 'غريب القرآن والإعراب', children: [for (final t in lib.where((t) => t.group == 'lugha')) _row(t)]),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 14, 24, 0),
+            child: Text('التفسير بلغات أخرى', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          ),
+          for (final n in names) GroupCard(title: n, children: [for (final t in langs[n]!) _row(t)]),
         ],
       ),
     );

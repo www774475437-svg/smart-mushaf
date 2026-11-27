@@ -10,6 +10,7 @@ import '../data/tafsir.dart';
 import '../services/audio.dart';
 import '../services/tts.dart';
 import 'common.dart';
+import 'settings_screen.dart';
 import 'reciters_screen.dart';
 
 /// Recorded (audio) tafsir series from MP3Quran.
@@ -294,6 +295,32 @@ class _ReciterSheetState extends State<_ReciterSheet> {
                         ),
                     ]),
                   ),
+                ],
+                if (q.isEmpty) ...[
+                  _section('التفسير بلغات أخرى'),
+                  _group([
+                    for (final r in rs.spoken)
+                      ListTile(
+                        leading: Icon(rs.currentId == r.id ? Icons.play_arrow_rounded : Icons.play_arrow_outlined,
+                            color: rs.currentId == r.id ? green : kGoldDeep.withValues(alpha: 0.6)),
+                        title: Text(r.name,
+                            style: TextStyle(
+                                fontSize: 16.5,
+                                fontWeight: rs.currentId == r.id ? FontWeight.w700 : FontWeight.w500,
+                                color: rs.currentId == r.id ? green : null)),
+                        subtitle: Text('${r.sub} • يُقرأ معنى كل آية بالصوت', style: const TextStyle(color: kGoldDeep)),
+                        onTap: () {
+                          Reciters.I.select(r.id);
+                          Navigator.pop(context);
+                        },
+                      ),
+                    ListTile(
+                      leading: Icon(Icons.translate_rounded, color: green),
+                      title: Text('تفاسير مكتوبة بثلاثين لغة', style: TextStyle(color: green, fontWeight: FontWeight.w600)),
+                      trailing: const Icon(Icons.chevron_left_rounded, color: Colors.grey),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TafsirsScreen())),
+                    ),
+                  ]),
                 ],
                 _section('التلاوات'),
                 if (rs.loadingTimed) const Padding(padding: EdgeInsets.only(bottom: 8), child: LinearProgressIndicator()),

@@ -1,0 +1,39 @@
+name: library
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - tool/build_library.py
+      - assets/gharib/library.json
+      - .github/workflows/library.yml
+
+permissions:
+  contents: write
+
+jobs:
+  library:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get the sources
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/spa5k/tafsir_api src
+          cd src
+          git sparse-checkout set --no-cone $(cd .. && python3 tool/build_library.py src out slugs)
+
+      - name: Build the library
+        run: python3 tool/build_library.py src out
+
+      - name: Publish (library branch)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: out
+          publish_branch: library
+          force_orphan: true
+          user_name: www774475437-svg
+          user_email: 338496743+www774475437-svg@users.noreply.github.com
+          commit_message: library update

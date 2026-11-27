@@ -11,6 +11,7 @@ import '../services/settings.dart';
 import '../services/store.dart';
 import '../services/tts.dart';
 import 'common.dart';
+import 'settings_screen.dart';
 import 'tasmee.dart';
 import 'reciter_sheet.dart';
 import 'reciters_screen.dart';
@@ -649,7 +650,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final ay = q.ayahs[g];
     final green = Theme.of(context).colorScheme.primary;
     final ref = '[سورة ${surahName(ay.s)}: ${ar(ay.a)}]';
-    final order = [...kTafsirs]..sort((a, b) => (a.id == AppSettings.I.tafsirId ? 0 : 1).compareTo(b.id == AppSettings.I.tafsirId ? 0 : 1));
+    final order = [...TafsirService.I.active]..sort((a, b) => (a.id == AppSettings.I.tafsirId ? 0 : 1).compareTo(b.id == AppSettings.I.tafsirId ? 0 : 1));
     return Scaffold(
       backgroundColor: _sheetBg(context),
       appBar: AppBar(backgroundColor: _sheetBg(context), title: const Text('المكتبة')),
@@ -674,6 +675,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
           ],
           for (final t in order) _TafsirBlock(key: ValueKey('${t.id}:$g'), t: t, g: g, scale: scale, refText: ref),
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+              onPressed: () async {
+                await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TafsirsScreen()));
+                if (mounted) setState(() {});
+              },
+              icon: const Icon(Icons.library_add_rounded),
+              label: const Text('أضف تفاسير أخرى أو تفسيرًا بلغة أخرى'),
+            ),
+          ),
           if ((q.similar[g] ?? const <int>[]).isNotEmpty) ...[
             const Padding(
               padding: EdgeInsets.fromLTRB(6, 18, 6, 6),
@@ -750,6 +763,25 @@ class _TafsirBlockState extends State<_TafsirBlock> {
   late Future<String> f;
   bool open = false;
 
+  Widget _act(IconData icon, String label, VoidCallback onTap) {
+    final green = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: green, size: 22),
+            const SizedBox(height: 3),
+            Text(label, style: TextStyle(fontSize: 11, color: green, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -766,44 +798,25 @@ class _TafsirBlockState extends State<_TafsirBlock> {
         final text = snap.data ?? '';
         final long = text.length > 420;
         final shown = (!open && long) ? '${text.substring(0, 420)} …' : text;
+        final first = widget.t.id == AppSettings.I.tafsirId;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(6, 16, 0, 2),
+              padding: const EdgeInsets.fromLTRB(6, 18, 6, 6),
               child: Row(
                 children: [
-                  Expanded(child: Text(widget.t.name, style: const TextStyle(color: kGoldDeep, fontSize: 15))),
-                  PopupMenuButton<String>(
-                    icon: Icon(Icons.more_horiz_rounded, color: green),
-                    onSelected: (v) {
-                      final plain = stripTashkeel(text);
-                      if (v == 'copy') {
-                        Clipboard.setData(ClipboardData(text: '${widget.t.name} ${widget.refText}:\n$plain'));
-                        toast(context, 'نُسخ التفسير');
-                      } else if (v == 'share') {
-                        Share.share('﴿${QuranData.I.clean[widget.g]}﴾ ${widget.refText}\n\n${widget.t.name}:\n$plain');
-                      } else if (v == 'listen') {
-                        Tts.I.speak(text, key: '${widget.t.id}:${widget.g}');
-                      } else if (v == 'stop') {
-                        Tts.I.stop();
-                      } else if (v == 'img') {
-                        Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => ShareImageScreen(g: widget.g, tafsir: plain)));
-                      } else if (v == 'def') {
-                        AppSettings.I.tafsirId = widget.t.id;
-                        toast(context, 'صار ${widget.t.name} هو التفسير الأول');
-                      }
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'listen', child: Text('استمع للتفسير')),
-                      PopupMenuItem(value: 'stop', child: Text('إيقاف الاستماع')),
-                      PopupMenuItem(value: 'copy', child: Text('نسخ التفسير')),
-                      PopupMenuItem(value: 'share', child: Text('مشاركة التفسير')),
-                      PopupMenuItem(value: 'img', child: Text('صورة مع التفسير')),
-                      PopupMenuItem(value: 'def', child: Text('اجعله التفسير الأول')),
-                    ],
-                  ),
+                  Container(width: 4, height: 18, decoration: BoxDecoration(color: kGold, borderRadius: BorderRadius.circular(3))),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: Text(widget.t.title,
+                          style: const TextStyle(color: kGoldDeep, fontSize: 16, fontWeight: FontWeight.w700))),
+                  if (first)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(color: green.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+                      child: Text('الأول', style: TextStyle(color: green, fontSize: 12, fontWeight: FontWeight.w700)),
+                    ),
                 ],
               ),
             ),
@@ -817,7 +830,10 @@ class _TafsirBlockState extends State<_TafsirBlock> {
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            SelectableText(shown, style: TextStyle(fontSize: 17 * widget.scale, height: 1.9)),
+                            SelectableText(shown,
+                                textDirection: widget.t.rtl ? TextDirection.rtl : TextDirection.ltr,
+                                textAlign: widget.t.rtl ? TextAlign.right : TextAlign.left,
+                                style: TextStyle(fontSize: 17 * widget.scale, height: 1.9)),
                             if (long)
                               Align(
                                 alignment: AlignmentDirectional.centerStart,
@@ -826,6 +842,31 @@ class _TafsirBlockState extends State<_TafsirBlock> {
                                   child: Text(open ? 'إخفاء' : 'متابعة القراءة'),
                                 ),
                               ),
+                            const Divider(height: 18),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _act(Icons.volume_up_rounded, 'استماع', () => Tts.I.speak(text, key: '${widget.t.id}:${widget.g}')),
+                                _act(Icons.stop_circle_outlined, 'إيقاف', () => Tts.I.stop()),
+                                _act(Icons.copy_rounded, 'نسخ', () {
+                                  Clipboard.setData(ClipboardData(text: '${widget.t.title} ${widget.refText}:\n${stripTashkeel(text)}'));
+                                  toast(context, 'نُسخ التفسير');
+                                }),
+                                _act(Icons.ios_share_rounded, 'مشاركة', () {
+                                  Share.share(
+                                      '﴿${QuranData.I.clean[widget.g]}﴾ ${widget.refText}\n\n${widget.t.title}:\n${stripTashkeel(text)}');
+                                }),
+                                _act(Icons.image_outlined, 'صورة', () {
+                                  Navigator.of(context).push(MaterialPageRoute(
+                                      builder: (_) => ShareImageScreen(g: widget.g, tafsir: stripTashkeel(text))));
+                                }),
+                                if (!first)
+                                  _act(Icons.push_pin_outlined, 'الأول', () {
+                                    AppSettings.I.tafsirId = widget.t.id;
+                                    toast(context, 'صار ${widget.t.title} هو التفسير الأول');
+                                  }),
+                              ],
+                            ),
                           ],
                         ),
             ),

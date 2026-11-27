@@ -89,6 +89,14 @@ const List<List<String>> _everyAyah = [
   ['Sahl_Yassin_128kbps', 'سهل ياسين'],
 ];
 
+/// Spoken translations of the meanings, ayah by ayah (EveryAyah): folder, language, reader.
+const List<List<String>> _spoken = [
+  ['English/Sahih_Intnl_Ibrahim_Walk_192kbps', 'الإنجليزية', 'إبراهيم ووك'],
+  ['translations/urdu_shamshad_ali_khan_46kbps', 'الأردية', 'شمشاد علي خان'],
+  ['translations/besim_korkut_ajet_po_ajet', 'البوسنية', 'بسيم كوركوت'],
+  ['translations/azerbaijani/balayev', 'الأذرية', 'بالاييف'],
+];
+
 dynamic _decode(String s) => jsonDecode(s);
 
 class Reciters extends ChangeNotifier {
@@ -99,6 +107,11 @@ class Reciters extends ChangeNotifier {
   final List<Reciter> perAyah = [
     for (final r in _everyAyah)
       Reciter('ea:${r[0]}', r[1], RecKind.ayah, 'https://everyayah.com/data/${r[0]}/', sub: 'آية بآية'),
+  ];
+  /// The meanings read aloud in other languages.
+  final List<Reciter> spoken = [
+    for (final r in _spoken)
+      Reciter('tr:${r[0]}', 'معاني القرآن ب${r[1]}', RecKind.ayah, 'https://everyayah.com/data/${r[0]}/', sub: r[2]),
   ];
   List<Reciter> all = [];
   List<Reciter> custom = [];
@@ -136,7 +149,7 @@ class Reciters extends ChangeNotifier {
     } catch (_) {}
   }
 
-  List<Reciter> get everything => [...timed, ...perAyah, ...custom, ...all];
+  List<Reciter> get everything => [...timed, ...perAyah, ...spoken, ...custom, ...all];
 
   Reciter? byId(String id) {
     for (final r in everything) {

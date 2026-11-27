@@ -145,6 +145,23 @@ class _MushafScreenState extends State<MushafScreen> {
                 );
               },
             ),
+            FutureBuilder<String>(
+              future: Gharib.I.ayahGharib(w.g),
+              builder: (c, snap) => (snap.data ?? '').isEmpty
+                  ? const SizedBox.shrink()
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Divider(height: 28),
+                        const Text('غريب هذه الآية', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                        const SizedBox(height: 6),
+                        SelectableText(snap.data!, style: const TextStyle(fontSize: 16.5, height: 1.9)),
+                        const SizedBox(height: 6),
+                        const Text('المصدر: «الميسر في غريب القرآن» — مجمع الملك فهد',
+                            style: TextStyle(fontSize: 12.5, color: kGoldDeep, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+            ),
             const Divider(height: 28),
             const Text('معنى الآية (التفسير الميسر)', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
@@ -156,6 +173,94 @@ class _MushafScreenState extends State<MushafScreen> {
         ),
       ),
     );
+  }
+
+  void _setPage(int p) {
+    if (p == page) return;
+    setState(() => page = p);
+    // Saving and loading fonts wait until the page has settled, so the turn itself stays smooth.
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 450), () {
+      if (!mounted) return;
+      UserStore.I.setLastPage(page);
+      MushafLayout.I.preload(page);
+    });
+  }
+
+  void _onPos() {
+    if (!AppSettings.I.scrollMode || !mounted) return;
+    final pos = _ipl.itemPositions.value.where((p) => p.itemTrailingEdge > 0.3).toList();
+    if (pos.isEmpty) return;
+    pos.sort((a, b) => a.index.compareTo(b.index));
+    final p = pos.first.index + 1;
+    if (p != page) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _setPage(p);
+      });
+    }
+  }
+
+  void _onAudio() {
+    final g = AudioCtl.I.currentG;
+    if (g == null || g == _lastAudioG) return;
+    final prev = _lastAudioG;
+    _lastAudioG = g;
+    if (!AppSettings.I.followAudio) return;
+    final p = QuranData.I.ayahs[g].page;
+    // Turn the page with the reciter only while the reader is still on the page being recited.
+    // If he moved to another page to look at something, leave him there (the return button brings him back).
+    final wasOn = prev == null || QuranData.I.ayahs[prev].page == page;
+    if (p != page && wasOn) _goTo(p);
+  }
+
+  void _goTo(int p, {bool animate = true}) {
+    p = p.clamp(1, 604);
+    if (AppSettings.I.scrollMode) {
+      if (_isc.isAttached) {
+        if (animate && (p - page).abs() <= 3) {
+          _isc.scrollTo(index: p - 1, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut);
+        } else {
+          _isc.jumpTo(index: p - 1);
+        }
+      }
+    } else if (_pc.hasClients) {
+      if (animate && (p - page).abs() <= 3) {
+        _pc.animateToPage(p - 1, duration: const Duration(milliseconds: 420), curve: Curves.easeInOut);
+      } else {
+        _pc.jumpToPage(p - 1);
+      }
+    }
+    _setPage(p);
+  }
+
+  // ---------- auto scroll ----------
+  void _startAuto() {
+    setState(() {
+      autoOn = true;
+      autoPaused = false;
+    });
+    WakelockPlus.enable();
+    _schedule();
+  }
+
+  void _schedule() {
+    _autoTimer?.cancel();
+    final secs = AppSettings.I.autoSeconds;
+    if (AppSettings.I.scrollMode) {
+      final h = MediaQuery.of(context).size.height;
+      final perSec = h * 1.1 / secs;
+      _autoTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!autoPaused && mounted) {
+          _soc.animateScroll(offset: perSec, duration: const Duration(milliseconds: 1000), curve: Curves.linear);
+        }
+      });
+    } else {
+      _autoTimer = Timer.periodic(Duration(seconds: secs), (_) {
+        if (!autoPaused && mounted && _pc.hasClients && page < 604) {
+          _pc.nextPage(duration: const Duration(milliseconds: 650), curve: Curves.easeInOut);
+        }
+      });
+    }
   }
 
   void _stopAuto() {
