@@ -5,7 +5,9 @@ file per surah. A speech recogniser writes down what is said with the time of ev
 and the words of each ayah are then looked for, in order, in that transcript.
 
 usage: align_tafsir.py out_dir surah [surah ...]"""
-import json, os, re, sys, urllib.request
+import json, os, re, subprocess, sys, urllib.request
+
+import numpy as np
 
 from faster_whisper import WhisperModel
 
@@ -66,7 +68,10 @@ for s in surahs:
     ayahs = [a['text'] for a in q['data']['ayahs']]
     if s not in (1, 9) and ayahs[0].startswith('بسم الله الرحمن الرحيم '):
         ayahs[0] = ayahs[0][len('بسم الله الرحمن الرحيم '):]
-    segs, info = model.transcribe(mp3, language='ar', word_timestamps=True, vad_filter=True, beam_size=2,
+    pcm = subprocess.run(['ffmpeg', '-v', 'error', '-i', mp3, '-ar', '16000', '-ac', '1', '-f', 's16le', '-'],
+                         capture_output=True, check=True).stdout
+    audio = np.frombuffer(pcm, np.int16).astype(np.float32) / 32768.0
+    segs, info = model.transcribe(audio, language='ar', word_timestamps=True, vad_filter=True, beam_size=2,
                                   condition_on_previous_text=False)
     tw, tt = [], []
     for sg in segs:
