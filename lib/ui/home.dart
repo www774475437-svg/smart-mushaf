@@ -5,6 +5,8 @@ import '../data/surah_names.dart';
 import '../services/store.dart';
 import 'common.dart';
 import 'khatma.dart';
+import 'prayer_screen.dart';
+import 'tasmee.dart';
 import 'reader.dart';
 import 'reciters_screen.dart';
 import 'search.dart';
@@ -163,6 +165,11 @@ class HomeScreen extends StatelessWidget {
                       _Feature(Icons.record_voice_over_rounded, 'الحفظ والتسميع', const Color(0xFF2E7D32), () => onTab(3)),
                       _Feature(Icons.event_available_rounded, 'الختمة', const Color(0xFF1565C0),
                           () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const KhatmaScreen()))),
+                      _Feature(Icons.access_time_filled_rounded, 'أوقات الصلاة', const Color(0xFF6D4C41),
+                          () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrayerScreen()))),
+                      _Feature(Icons.groups_rounded, 'مجلس الحفاظ', kEmeraldDark, () => onTab(2)),
+                      _Feature(Icons.mic_rounded, 'سمِّع الصفحة', const Color(0xFFC62828),
+                          () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => TasmeeScreen(page: lp)))),
                       _Feature(Icons.search_rounded, 'البحث', const Color(0xFF00838F),
                           () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchScreen()))),
                     ],

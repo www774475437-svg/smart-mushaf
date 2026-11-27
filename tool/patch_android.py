@@ -55,6 +55,8 @@ perms = (
     '    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n'
     '    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n'
     '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n'
+    '    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>\n'
+    '    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>\n'
     '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>\n'
 )
 if 'android.permission.INTERNET' not in m:
