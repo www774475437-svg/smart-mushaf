@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+
+import 'package:flutter/services.dart' show rootBundle;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -34,6 +36,7 @@ class AudioCtl extends ChangeNotifier {
   int? _stopAtMs;
   int? _loopFromMs;
   final Map<String, List<List<int>>> _timingCache = {};
+  Map<String, dynamic>? _mukhtasar;
 
   /// Download progress per key "reciterId|surah" (0..1).
   final Map<String, double> downloads = {};
@@ -217,6 +220,23 @@ class AudioCtl extends ChangeNotifier {
   Future<List<List<int>>?> _loadTiming(Reciter r, int s) async {
     final key = '${r.id}|$s';
     if (_timingCache.containsKey(key)) return _timingCache[key];
+    if (r.id == kMukhtasarId) {
+      // the starts of the ayahs inside the recorded tafsir come with the app
+      try {
+        _mukhtasar ??= jsonDecode(await rootBundle.loadString('assets/gharib/mukhtasar_times.json')) as Map<String, dynamic>;
+        final l = _mukhtasar!['$s'] as List?;
+        if (l == null || l.isEmpty) return null;
+        final out = <List<int>>[];
+        for (var i = 0; i < l.length; i++) {
+          final st = ((l[i] as num) * 1000).round();
+          final en = i + 1 < l.length ? ((l[i + 1] as num) * 1000).round() : 1 << 30;
+          out.add([i + 1, st, en]);
+        }
+        return _timingCache[key] = out;
+      } catch (_) {
+        return null;
+      }
+    }
     File? f;
     if (_docs.isNotEmpty) f = File('$_docs/timing_${_safe(r.id)}_$s.json');
     String? body;

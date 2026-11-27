@@ -204,6 +204,9 @@ class _ReciterSheetState extends State<_ReciterSheet> {
     return ListTile(
       leading: Icon(sel ? Icons.play_arrow_rounded : Icons.play_arrow_outlined, color: sel ? green : kGoldDeep.withValues(alpha: 0.6)),
       title: Text(r.name, style: TextStyle(fontWeight: sel ? FontWeight.w700 : FontWeight.w500, fontSize: 16.5, color: sel ? green : null)),
+      subtitle: r.id == kMukhtasarId
+          ? Text('${r.sub} • تُتلى الآية ثم يُقرأ تفسيرها', style: const TextStyle(color: kGoldDeep))
+          : null,
       trailing: IconButton(
         tooltip: 'السور والتحميل',
         icon: Icon(Icons.info_outline_rounded, color: green),
@@ -280,22 +283,7 @@ class _ReciterSheetState extends State<_ReciterSheet> {
                   FutureBuilder<List<AudioTafsir>>(
                     future: tafasir,
                     builder: (context, snap) => _group([
-                      ListTile(
-                        leading: Icon(Icons.play_arrow_rounded, color: green),
-                        title: const Text(kMukhtasarAudioName, style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w600)),
-                        subtitle: Text('$kMukhtasarAudioBy • سورة ${surahName(_surah)}', style: const TextStyle(color: kGoldDeep)),
-                        trailing: IconButton(
-                          tooltip: 'كل السور',
-                          icon: Icon(Icons.info_outline_rounded, color: green),
-                          onPressed: () =>
-                              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MukhtasarAudioScreen())),
-                        ),
-                        onTap: () {
-                          Tts.I.stop();
-                          playMukhtasarAudio(_surah);
-                          Navigator.pop(context);
-                        },
-                      ),
+                      _reciter(rs.mukhtasar),
                       for (final t in snap.data ?? const <AudioTafsir>[])
                         ListTile(
                           leading: Icon(Icons.play_arrow_outlined, color: kGoldDeep.withValues(alpha: 0.6)),

@@ -8,6 +8,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 String pad3(int n) => n.toString().padLeft(3, '0');
 
+/// «المختصر الصوتي»: the recorded tafsir (each ayah is recited, then explained).
+/// It behaves like a recitation that has ayah timings, so every ayah can be played by itself.
+const String kMukhtasarId = 'tf:mukhtasar';
+
 enum RecKind { ayah, surah, timed }
 
 class Reciter {
@@ -24,7 +28,7 @@ class Reciter {
   bool get timed => kind == RecKind.timed;
 
   String ayahUrl(int s, int a) => '$base${pad3(s)}${pad3(a)}.mp3';
-  String surahUrl(int s) => '$base${pad3(s)}.mp3';
+  String surahUrl(int s) => id == kMukhtasarId ? '${base}ar-${pad3(s)}-mokhtasar-fe-tafceer.mp3' : '$base${pad3(s)}.mp3';
   bool hasSurah(int s) => surahs == null || surahs!.contains(s);
   bool get perAyah => kind == RecKind.ayah;
 
@@ -108,6 +112,10 @@ class Reciters extends ChangeNotifier {
     for (final r in _everyAyah)
       Reciter('ea:${r[0]}', r[1], RecKind.ayah, 'https://everyayah.com/data/${r[0]}/', sub: 'آية بآية'),
   ];
+  final Reciter mukhtasar = const Reciter(kMukhtasarId, 'المختصر الصوتي', RecKind.timed,
+      'https://d1.islamhouse.com/data/ar/ih_sounds/chain_01/mokhtasar-fe-tafceer/',
+      sub: 'عبدالله الأسمري وصابر عبدالحكم');
+
   /// The meanings read aloud in other languages.
   final List<Reciter> spoken = [
     for (final r in _spoken)
@@ -149,7 +157,7 @@ class Reciters extends ChangeNotifier {
     } catch (_) {}
   }
 
-  List<Reciter> get everything => [...timed, ...perAyah, ...spoken, ...custom, ...all];
+  List<Reciter> get everything => [mukhtasar, ...timed, ...perAyah, ...spoken, ...custom, ...all];
 
   Reciter? byId(String id) {
     for (final r in everything) {

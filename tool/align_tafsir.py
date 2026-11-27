@@ -9,6 +9,32 @@ import json, os, re, subprocess, sys, urllib.request
 
 import numpy as np
 
+if sys.argv[1] == '--join':
+    # put the parts made by the parallel jobs into the one file the app reads
+    res = {}
+    try:
+        res = json.load(open('assets/gharib/mukhtasar_times.json'))
+    except Exception:  # noqa
+        pass
+    miss = 0
+    for f in sorted(os.listdir(sys.argv[2])):
+        if not f.endswith('.json'):
+            continue
+        d = json.load(open(os.path.join(sys.argv[2], f)))
+        t = d['t']
+        miss += sum(1 for x in t if x is None)
+        # an ayah that was not found begins where the one before it begins
+        for i in range(len(t)):
+            if t[i] is None:
+                t[i] = 0.0 if i == 0 else t[i - 1]
+        for i in range(1, len(t)):
+            if t[i] < t[i - 1]:
+                t[i] = t[i - 1]
+        res[str(d['s'])] = [round(float(x), 2) for x in t]
+    json.dump(res, open('assets/gharib/mukhtasar_times.json', 'w'), separators=(',', ':'))
+    print('surahs', len(res), 'ayahs not found', miss)
+    sys.exit(0)
+
 from faster_whisper import WhisperModel
 
 out = sys.argv[1]
@@ -94,7 +120,7 @@ for s in surahs:
             if sc > best:
                 best, bp = sc, p
         if bp >= 0 and best >= need:
-            starts.append(round(max(0.0, tt[bp] - 0.35), 2))
+            starts.append(round(float(max(0.0, tt[bp] - 0.35)), 2))
             cur = bp + max(1, int(len(ay) * 0.6))
             found += 1
         else:
