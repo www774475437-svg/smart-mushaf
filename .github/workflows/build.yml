@@ -122,6 +122,15 @@ jobs:
       - name: Build website
         run: flutter build web --release --base-href /smart-mushaf/
 
+      - name: Add the Hajuri mushaf (served by the site so every browser can play it)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p build/web/hajuri
+          gh release download hajuri-mushaf -R www774475437-svg/smart-mushaf-store -D build/web/hajuri -p '*.mp3'
+          ls build/web/hajuri | wc -l
+          du -sh build/web
+
       - name: Publish website (gh-pages branch)
         uses: peaceiris/actions-gh-pages@v4
         with:

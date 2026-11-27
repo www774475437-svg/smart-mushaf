@@ -118,7 +118,7 @@ class Reciters extends ChangeNotifier {
 
   /// The murattal mushaf of الشيخ يحيى الحجوري, kept surah by surah in the app's own store.
   final Reciter hajuri = const Reciter('st:hajuri', 'يحيى الحجوري', RecKind.surah,
-      'https://github.com/www774475437-svg/smart-mushaf-store/releases/download/hajuri-mushaf/',
+      'https://www774475437-svg.github.io/smart-mushaf/hajuri/',
       sub: 'مصحف مرتل • سورة كاملة');
 
   /// The meanings read aloud in other languages.
