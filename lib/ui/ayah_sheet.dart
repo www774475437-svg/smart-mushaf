@@ -844,10 +844,8 @@ class _TafsirBlockState extends State<_TafsirBlock> {
                               ),
                             const Divider(height: 18),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
-                                _act(Icons.volume_up_rounded, 'استماع', () => Tts.I.speak(text, key: '${widget.t.id}:${widget.g}')),
-                                _act(Icons.stop_circle_outlined, 'إيقاف', () => Tts.I.stop()),
                                 _act(Icons.copy_rounded, 'نسخ', () {
                                   Clipboard.setData(ClipboardData(text: '${widget.t.title} ${widget.refText}:\n${stripTashkeel(text)}'));
                                   toast(context, 'نُسخ التفسير');

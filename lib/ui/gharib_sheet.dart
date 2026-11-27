@@ -40,21 +40,31 @@ class _BookCard extends StatefulWidget {
 }
 
 class _BookCardState extends State<_BookCard> {
-  bool full = false;
+  final _mark = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    // bring the place of this ayah into view
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final c = _mark.currentContext;
+      if (c != null && (widget.r.at > 0 || widget.r.start > 200)) {
+        Scrollable.ensureVisible(c, alignment: 0.25, duration: const Duration(milliseconds: 450));
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final r = widget.r;
     final cs = Theme.of(context).colorScheme;
     final ps = r.paragraphs;
-    // the lines around the place where the book quotes this ayah
-    final from = (r.at - 1).clamp(0, ps.length - 1);
-    final to = (r.at + 1).clamp(0, ps.length - 1);
-    final part = ps.length <= 4;
-    final shown = (full || part) ? ps : ps.sublist(from, to + 1);
+    final base = TextStyle(fontSize: 16.5, height: 1.95, color: cs.onSurface, fontFamily: 'Tajawal');
+    final red = base.copyWith(
+        color: Colors.red.shade700, fontWeight: FontWeight.w700, backgroundColor: Colors.red.withValues(alpha: 0.08));
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       decoration: BoxDecoration(
         color: cs.surface,
         borderRadius: BorderRadius.circular(18),
@@ -84,16 +94,19 @@ class _BookCardState extends State<_BookCard> {
             ],
           ),
           const SizedBox(height: 10),
-          if (!full && !part && from > 0) const Text('…', style: TextStyle(color: Colors.grey)),
-          SelectableText(shown.join('\n'), style: const TextStyle(fontSize: 16.5, height: 1.95)),
-          if (!part)
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton(
-                onPressed: () => setState(() => full = !full),
-                child: Text(full ? 'إظهار موضع الآية فقط' : 'عرض المادة كاملة'),
-              ),
-            ),
+          // the whole entry as the book has it; what it says at this ayah is in red
+          for (var i = 0; i < ps.length; i++)
+            if (i == r.at && r.end > r.start && r.end <= ps[i].length)
+              SelectableText.rich(
+                key: _mark,
+                TextSpan(style: base, children: [
+                  TextSpan(text: ps[i].substring(0, r.start)),
+                  TextSpan(text: ps[i].substring(r.start, r.end), style: red),
+                  TextSpan(text: ps[i].substring(r.end)),
+                ]),
+              )
+            else
+              SelectableText(ps[i], style: base),
         ],
       ),
     );

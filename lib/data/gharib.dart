@@ -14,7 +14,10 @@ class GharibRef {
 
   /// The paragraph that quotes the ayah (root dictionaries); 0 for the others.
   final int at;
-  const GharibRef(this.book, this.author, this.edition, this.title, this.paragraphs, this.at);
+
+  /// Where, inside that paragraph, the book quotes this very ayah (start == end: nowhere).
+  final int start, end;
+  const GharibRef(this.book, this.author, this.edition, this.title, this.paragraphs, this.at, this.start, this.end);
 }
 
 dynamic _decode(Uint8List b) => jsonDecode(utf8.decode(GZipDecoder().decodeBytes(b)));
@@ -118,7 +121,7 @@ class Gharib {
       final e = _entries[(r as List)[0] as int] as List;
       final b = _books[e[0] as int] as Map;
       out.add(GharibRef(b['name'] as String, b['author'] as String, b['ed'] as String, e[1] as String,
-          (e[2] as String).split('\n'), r[1] as int));
+          (e[2] as String).split('\n'), r[1] as int, r.length > 3 ? r[2] as int : 0, r.length > 3 ? r[3] as int : 0));
     }
     out.sort((a, b) => _order(a.book).compareTo(_order(b.book)));
     return out;

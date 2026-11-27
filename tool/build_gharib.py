@@ -95,12 +95,19 @@ for alt, n in {'الاسراء': 17, 'بني اسراءيل': 17, 'المءمن'
 
 
 def cites(text, sep):
-    """(surah, ayah) pairs quoted in a text, e.g. [الكهف/ 81] or [التوبة: 25]."""
+    """Places where a text quotes an ayah, e.g. [الكهف/ 81] or [التوبة: 25]: (g, start, end).
+    The span runs from the end of the quotation before it to the end of the reference,
+    so it covers the words of the ayah and their reference."""
     out = []
+    last = 0
     for m in re.finditer(r'\[\[?([^\]\[%s]{1,20}?)\s*%s\s*(\d+)(?:\s*[-–]\s*\d+)?\s*\]' % (sep, sep), text):
         s = SURAH.get(key(m.group(1)))
+        st = last
+        while st < m.start() and text[st] in ' ،.؛:':
+            st += 1
         if s and (s, int(m.group(2))) in G:
-            out.append(G[(s, int(m.group(2)))])
+            out.append((G[(s, int(m.group(2)))], st, m.end()))
+        last = m.end()
     return out
 
 
@@ -245,7 +252,17 @@ for kind, txt in paragraphs(f_umda):
 n_umda = len(ENTRIES) - n_raghib
 
 for e in ENTRIES:
-    e[2] = [p for p in (tidy(x) for x in e[2]) if p]
+    ps = []
+    for p in (tidy(x) for x in e[2]):
+        if not p:
+            continue
+        # the digital copy puts the reference of an ayah on a line of its own: join it to its ayah
+        if ps and (p.startswith('[') or re.search(r'[:،]$', ps[-1]) or not re.search(r'[.؟!»\])…]$', ps[-1])) \
+                and not re.match(r'^\d+ ?-', p) and '...' not in ps[-1] and '...' not in p:
+            ps[-1] += ' ' + p
+        else:
+            ps.append(p)
+    e[2] = ps
 
 # words -> root entries that quote their ayah
 REFS = [dict() for _ in range(6236)]     # g -> {word index: [[entry, paragraph]]}
@@ -255,15 +272,15 @@ for book, sep in ((0, '/'), (1, ':')):
         if e[0] != book:
             continue
         for pi, p in enumerate(e[2]):
-            for g in cites(p, sep):
-                cited.setdefault(ei, {}).setdefault(g, pi)
+            for g, st, en in cites(p, sep):
+                cited.setdefault(ei, {}).setdefault(g, [pi, st, en])
     for g, row in enumerate(WORDS):
         for wi, (_, root) in enumerate(row):
             if not root:
                 continue
             ei = next((ROOT_ENTRY[book][v] for v in variants(root) if v in ROOT_ENTRY[book]), None)
             if ei is not None and g in cited.get(ei, {}):
-                REFS[g].setdefault(wi, []).append([ei, cited[ei][g]])
+                REFS[g].setdefault(wi, []).append([ei] + cited[ei][g])
 
 # ---------------- 3. التبيان لابن الهائم ----------------
 surah, cur = 0, None
@@ -305,15 +322,16 @@ for kind, txt in paragraphs(f_tibyan):
         if hit:
             n_tib_hit += 1
         for wi in hit:
-            REFS[g].setdefault(wi, []).append([cur, 0])
+            REFS[g].setdefault(wi, []).append([cur, 0, 0, 0])
     elif cur is not None:
         ENTRIES[cur][2].append(t)
 
 # keep only the entries that some word points to
 used = sorted({r[0] for d in REFS for l in d.values() for r in l})
+
 remap = {e: i for i, e in enumerate(used)}
 out_entries = [[ENTRIES[e][0], ENTRIES[e][1], '\n'.join(ENTRIES[e][2])] for e in used]
-out_refs = [{str(wi): [[remap[e], p] for e, p in l] for wi, l in d.items()} for d in REFS]
+out_refs = [{str(wi): [[remap[r[0]]] + r[1:] for r in l] for wi, l in d.items()} for d in REFS]
 books = [
     {'name': 'المفردات في غريب القرآن', 'author': 'الراغب الأصفهاني', 'ed': 'تحقيق صفوان عدنان الداودي — دار القلم'},
     {'name': 'عمدة الحفاظ في تفسير أشرف الألفاظ', 'author': 'السمين الحلبي', 'ed': 'تحقيق محمد باسل عيون السود — دار الكتب العلمية'},
@@ -323,7 +341,7 @@ with gzip.open('assets/gharib/gharib.json.gz', 'wb', 9) as f:
     f.write(json.dumps({'books': books, 'e': out_entries, 'w': out_refs, 'n': [len(r) for r in WORDS]},
                        ensure_ascii=False, separators=(',', ':')).encode())
 words_with = sum(len(d) for d in REFS)
-per = [sum(1 for d in REFS for l in d.values() if any(ENTRIES[e][0] == b for e, _ in l)) for b in range(3)]
+per = [sum(1 for d in REFS for l in d.values() if any(ENTRIES[r[0]][0] == b for r in l)) for b in range(3)]
 print('raghib entries', n_raghib, '(bold fragments joined', n_false, ') umda entries', n_umda,
       'tibyan entries', n_tib, 'matched', n_tib_hit)
 print('words with a meaning', words_with, 'of', sum(len(r) for r in WORDS), 'per book', per, 'entries kept', len(used))

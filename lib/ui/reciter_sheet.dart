@@ -279,12 +279,6 @@ class _ReciterSheetState extends State<_ReciterSheet> {
                   FutureBuilder<List<AudioTafsir>>(
                     future: tafasir,
                     builder: (context, snap) => _group([
-                      ListTile(
-                        leading: Icon(Icons.play_arrow_outlined, color: kGoldDeep.withValues(alpha: 0.6)),
-                        title: const Text('التفسير الميسر', style: TextStyle(fontSize: 16.5)),
-                        subtitle: const Text('قراءة آلية بصوت الجوال لتفسير هذه الصفحة', style: TextStyle(color: kGoldDeep)),
-                        onTap: _ttsPage,
-                      ),
                       for (final t in snap.data ?? const <AudioTafsir>[])
                         ListTile(
                           leading: Icon(Icons.play_arrow_outlined, color: kGoldDeep.withValues(alpha: 0.6)),
