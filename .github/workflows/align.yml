@@ -1,0 +1,29 @@
+name: align
+
+on:
+  workflow_dispatch:
+    inputs:
+      surahs:
+        description: surah numbers separated by spaces
+        required: true
+        default: '1 93 112 78'
+      model:
+        description: recogniser size
+        required: false
+        default: small
+
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -q faster-whisper
+      - name: Find where every ayah begins
+        env:
+          WHISPER: ${{ inputs.model }}
+        run: python3 tool/align_tafsir.py out ${{ inputs.surahs }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: timings
+          path: out
