@@ -13,6 +13,7 @@ import '../services/settings.dart';
 import '../services/store.dart';
 import 'ayah_sheet.dart';
 import '../data/gharib.dart';
+import 'gharib_sheet.dart';
 import '../data/layout.dart';
 import 'common.dart';
 import 'mushaf_lines.dart';
@@ -99,80 +100,18 @@ class _MushafScreenState extends State<MushafScreen> {
     });
   }
 
-  void _wordMeaning(LWord w) {
-    final ay = QuranData.I.ayahs[w.g];
-    final meaning = Gharib.I.of(w);
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.6,
-        maxChildSize: 0.92,
-        minChildSize: 0.3,
-        builder: (ctx, sc) => ListView(
-          controller: sc,
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          children: [
-            Text(w.t, textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'UthmanicHafs', fontSize: 34, height: 1.8)),
-            Text(ay.ref, textAlign: TextAlign.center, style: const TextStyle(color: kGoldDeep)),
-            const SizedBox(height: 12),
-            FutureBuilder<WordMeaning?>(
-              future: meaning,
-              builder: (c, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()));
-                }
-                final m = snap.data;
-                if (m == null || m.text == null) {
-                  return Text(
-                      m == null
-                          ? 'هذه الكلمة من الحروف والأدوات، وليس لها مادة في كتاب المفردات.'
-                          : 'مادة «${m.root}» ليست في كتاب المفردات.',
-                      style: const TextStyle(color: Colors.grey));
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('معنى الكلمة • مادة «${m.head}»', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                    const SizedBox(height: 6),
-                    SelectableText(m.text!, style: const TextStyle(fontSize: 16.5, height: 1.9)),
-                    const SizedBox(height: 6),
-                    const Text('المصدر: «المفردات في غريب القرآن» للراغب الأصفهاني رَحِمَهُ الله',
-                        style: TextStyle(fontSize: 12.5, color: kGoldDeep, fontWeight: FontWeight.w600)),
-                  ],
-                );
-              },
-            ),
-            FutureBuilder<String>(
-              future: Gharib.I.ayahGharib(w.g),
-              builder: (c, snap) => (snap.data ?? '').isEmpty
-                  ? const SizedBox.shrink()
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Divider(height: 28),
-                        const Text('غريب هذه الآية', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                        const SizedBox(height: 6),
-                        SelectableText(snap.data!, style: const TextStyle(fontSize: 16.5, height: 1.9)),
-                        const SizedBox(height: 6),
-                        const Text('المصدر: «الميسر في غريب القرآن» — مجمع الملك فهد',
-                            style: TextStyle(fontSize: 12.5, color: kGoldDeep, fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-            ),
-            const Divider(height: 28),
-            const Text('معنى الآية (التفسير الميسر)', style: TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            FutureBuilder<String>(
-              future: TafsirService.I.get('muyassar', w.g),
-              builder: (c, snap) => Text(snap.data ?? '…', style: const TextStyle(fontSize: 16, height: 1.85)),
-            ),
-          ],
-        ),
-      ),
-    );
+  /// Two taps on a word: its meaning from the gharib books. A word the books do not
+  /// explain opens nothing; instead the explained words of the page turn red for two seconds.
+  Future<void> _wordMeaning(LWord w) async {
+    await Gharib.I.load();
+    if (!mounted) return;
+    final refs = Gharib.I.refs(w);
+    if (refs.isEmpty) {
+      gharibFlash.value = -1;
+      gharibFlash.value = w.g;
+      return;
+    }
+    showGharibSheet(context, w, refs);
   }
 
   void _setPage(int p) {
@@ -597,6 +536,8 @@ class _MushafPageState extends State<MushafPage> {
     AppSettings.I.removeListener(_all);
     AudioCtl.I.removeListener(_maybe);
     UserStore.I.removeListener(_maybe);
+    gharibFlash.removeListener(_onFlash);
+    _flashTimer?.cancel();
     for (final r in _recs.values) {
       r.dispose();
     }
@@ -627,6 +568,21 @@ class _MushafPageState extends State<MushafPage> {
     if (mounted) setState(() {});
   }
 
+  Set<String>? _flash;
+  Timer? _flashTimer;
+
+  void _onFlash() {
+    final g = gharibFlash.value;
+    if (g < 0 || !mounted || !QuranData.I.pageAyahs[widget.page].contains(g)) return;
+    final keys = Gharib.I.pageKeys(widget.page);
+    _flashTimer?.cancel();
+    setState(() => _flash = keys);
+    _flashTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _flash = null);
+    });
+    if (keys.isEmpty) toast(context, 'ليس في هذه الصفحة كلمات لها غريب في الكتب');
+  }
+
   void _maybe() {
     final s = _sig();
     if (s == _last) return;
@@ -641,6 +597,8 @@ class _MushafPageState extends State<MushafPage> {
     AppSettings.I.addListener(_all);
     AudioCtl.I.addListener(_maybe);
     UserStore.I.addListener(_maybe);
+    gharibFlash.addListener(_onFlash);
+    Gharib.I.load();
   }
 
   @override
@@ -657,6 +615,7 @@ class _MushafPageState extends State<MushafPage> {
       final pg = MushafLinesPage(
           page: widget.page,
           selectedG: widget.selectedG,
+          marks: _flash,
           onLongPress: widget.onLongPress,
           onWordDoubleTap: widget.onWordDoubleTap);
       if (widget.expand) return pg;

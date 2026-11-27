@@ -1,95 +1,133 @@
 import 'dart:convert';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'layout.dart';
 import 'quran.dart';
 
-class WordMeaning {
-  final String root;
-  final String? head, text;
-  const WordMeaning(this.root, this.head, this.text);
+/// What one book says about a word at its ayah.
+class GharibRef {
+  final String book, author, edition, title;
+  final List<String> paragraphs;
+
+  /// The paragraph that quotes the ayah (root dictionaries); 0 for the others.
+  final int at;
+  const GharibRef(this.book, this.author, this.edition, this.title, this.paragraphs, this.at);
 }
 
-/// The root of every word of the Quran, and its entry in
-/// «المفردات في غريب القرآن» للراغب الأصفهاني.
+dynamic _decode(Uint8List b) => jsonDecode(utf8.decode(GZipDecoder().decodeBytes(b)));
+
+/// A word that the reader pressed and that has no meaning in the books:
+/// the pages that show its ayah colour their explained words for a moment.
+final ValueNotifier<int> gharibFlash = ValueNotifier<int>(-1);
+
+/// Meanings of the uncommon words (غريب القرآن), taken only from printed books:
+/// المفردات للراغب (تحقيق الداودي)، عمدة الحفاظ للسمين الحلبي، التبيان لابن الهائم.
 class Gharib {
   Gharib._();
   static final Gharib I = Gharib._();
-  List<dynamic> _roots = const [];
-  List<dynamic> _words = const [];
-  List<dynamic> _book = const [];
+  List<dynamic> _books = const [], _entries = const [], _words = const [], _counts = const [];
   Future<void>? _f;
+  bool ready = false;
 
   Future<void> load() => _f ??= _load();
 
-  Future<dynamic> _gz(String path) async {
-    final d = await rootBundle.load(path);
-    return jsonDecode(utf8.decode(GZipDecoder().decodeBytes(d.buffer.asUint8List(d.offsetInBytes, d.lengthInBytes))));
-  }
-
   Future<void> _load() async {
     try {
-      final r = await _gz('assets/gharib/roots.json.gz') as Map<String, dynamic>;
-      _roots = r['r'] as List;
-      _words = r['w'] as List;
-      _book = await _gz('assets/gharib/mufradat.json.gz') as List;
+      final d = await rootBundle.load('assets/gharib/gharib.json.gz');
+      final m = await compute(_decode, d.buffer.asUint8List(d.offsetInBytes, d.lengthInBytes)) as Map<String, dynamic>;
+      _books = m['books'] as List;
+      _entries = m['e'] as List;
+      _words = m['w'] as List;
+      _counts = m['n'] as List;
+      ready = true;
     } catch (_) {}
   }
 
-  List<dynamic>? _short;
-
-  /// The hard words of the ayah from «الميسر في غريب القرآن» (مجمع الملك فهد).
-  Future<String> ayahGharib(int g) async {
-    try {
-      _short ??= await _gz('assets/gharib/muyassar_gharib.json.gz') as List;
-      return g < _short!.length ? _short![g] as String : '';
-    } catch (_) {
-      return '';
+  int _before(int g, int page) {
+    // words of the ayah printed on the pages before [page]
+    final lay = MushafLayout.I;
+    var n = 0;
+    for (var p = QuranData.I.ayahs[g].page; p < page && p <= lay.pages.length; p++) {
+      for (final l in lay.pages[p - 1]) {
+        for (final x in l.words) {
+          if (x.g == g && !x.end) n++;
+        }
+      }
     }
+    return n;
   }
 
-  /// The place of a word of the page inside its ayah (0 for the first word).
-  int indexOf(LWord w) {
+  bool _sameSplit(int g) {
+    // the page layout and the books' word list must cut the ayah into the same words
     final lay = MushafLayout.I;
-    final start = QuranData.I.ayahs[w.g].page;
+    final start = QuranData.I.ayahs[g].page;
     var n = 0;
     for (var p = start; p <= start + 2 && p <= lay.pages.length; p++) {
       for (final l in lay.pages[p - 1]) {
         for (final x in l.words) {
+          if (x.g == g && !x.end) n++;
+        }
+      }
+    }
+    return g < _counts.length && n == _counts[g];
+  }
+
+  /// The place of every explained word of the page: 'line:index' keys.
+  Set<String> pageKeys(int page) {
+    final out = <String>{};
+    if (!ready || !MushafLayout.I.ready) return out;
+    final lines = MushafLayout.I.pages[page - 1];
+    final pos = <int, int>{};
+    final ok = <int, bool>{};
+    for (var i = 0; i < lines.length; i++) {
+      for (var k = 0; k < lines[i].words.length; k++) {
+        final w = lines[i].words[k];
+        if (w.end || w.g < 0 || w.g >= _words.length) continue;
+        final idx = pos[w.g] ??= _before(w.g, page);
+        pos[w.g] = idx + 1;
+        if (!(ok[w.g] ??= _sameSplit(w.g))) continue;
+        if ((_words[w.g] as Map).containsKey('$idx')) out.add('$i:$k');
+      }
+    }
+    return out;
+  }
+
+  /// What the books say about this word of the page.
+  List<GharibRef> refs(LWord w) {
+    if (!ready || w.end || w.g < 0 || w.g >= _words.length || !_sameSplit(w.g)) return const [];
+    final lay = MushafLayout.I;
+    final start = QuranData.I.ayahs[w.g].page;
+    var idx = -1, n = 0;
+    for (var p = start; p <= start + 2 && p <= lay.pages.length && idx < 0; p++) {
+      for (final l in lay.pages[p - 1]) {
+        for (final x in l.words) {
           if (x.g != w.g || x.end) continue;
-          if (identical(x, w)) return n;
+          if (identical(x, w)) idx = n;
           n++;
         }
       }
     }
-    return -1;
+    if (idx < 0) return const [];
+    final l = (_words[w.g] as Map)['$idx'] as List?;
+    if (l == null) return const [];
+    final out = <GharibRef>[];
+    for (final r in l) {
+      final e = _entries[(r as List)[0] as int] as List;
+      final b = _books[e[0] as int] as Map;
+      out.add(GharibRef(b['name'] as String, b['author'] as String, b['ed'] as String, e[1] as String,
+          (e[2] as String).split('\n'), r[1] as int));
+    }
+    out.sort((a, b) => _order(a.book).compareTo(_order(b.book)));
+    return out;
   }
 
-  Future<WordMeaning?> of(LWord w) async {
-    await load();
-    final i = indexOf(w);
-    if (i < 0 || w.g >= _words.length) return null;
-    final row = _words[w.g] as List;
-    // the layout and the roots list must split the ayah into the same words
-    var count = 0;
-    final lay = MushafLayout.I;
-    final start = QuranData.I.ayahs[w.g].page;
-    for (var p = start; p <= start + 2 && p <= lay.pages.length; p++) {
-      for (final l in lay.pages[p - 1]) {
-        for (final x in l.words) {
-          if (x.g == w.g && !x.end) count++;
-        }
-      }
+  int _order(String book) {
+    for (var i = 0; i < _books.length; i++) {
+      if ((_books[i] as Map)['name'] == book) return i;
     }
-    if (count != row.length || i >= row.length) return null;
-    final ri = row[i] as int;
-    if (ri < 0 || ri >= _roots.length) return null;
-    final r = _roots[ri] as List;
-    final hi = r[1] as int;
-    if (hi < 0 || hi >= _book.length) return WordMeaning(r[0] as String, null, null);
-    final e = _book[hi] as List;
-    return WordMeaning(r[0] as String, e[0] as String, e[1] as String);
+    return 99;
   }
 }

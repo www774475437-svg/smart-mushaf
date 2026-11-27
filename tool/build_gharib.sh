@@ -1,0 +1,3 @@
+#!/bin/sh
+# paths of the OpenITI checkouts on the machine that builds the data
+python3 tool/build_gharib.py /home/claude/mustafa0x/quran-morphology/quran-morphology.txt /home/claude/openiti/0525ah/data/0502RaghibIsbahani/0502RaghibIsbahani.Mufradat/0502RaghibIsbahani.Mufradat.Shamela0023636-ara1 /home/claude/openiti/0775AH/data/0756IbnYusufSaminHalabi/0756IbnYusufSaminHalabi.CumdatHuffaz/0756IbnYusufSaminHalabi.CumdatHuffaz.Sham19Y0017829-ara1 /home/claude/openiti/0825AH/data/0815IbnMuhammadShihabDinIbnHaim/0815IbnMuhammadShihabDinIbnHaim.TibyanFiTafsirGharib/0815IbnMuhammadShihabDinIbnHaim.TibyanFiTafsirGharib.Shamela0023598-ara1 /home/claude/openiti/0525ah/data/0502RaghibIsbahani/0502RaghibIsbahani.Mufradat/0502RaghibIsbahani.Mufradat.JK001150-ara1 "$@"

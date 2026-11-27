@@ -144,15 +144,6 @@
 "group": "lugha"
 },
 {
-"id": "siraj",
-"slug": "asseraj-fi-bayan-gharib-alquran",
-"name": "السراج في بيان غريب القرآن",
-"author": "محمد الخضيري",
-"lang": "ar",
-"langName": "العربية",
-"group": "lugha"
-},
-{
 "id": "irab",
 "slug": "al-i-rab-al-muyassar",
 "name": "الإعراب الميسر",
