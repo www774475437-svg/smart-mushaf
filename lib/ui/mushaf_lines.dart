@@ -356,6 +356,27 @@ class _FramePainter extends CustomPainter {
     canvas.drawPath(path, light);
     canvas.drawPath(path, line);
 
+    // a second, finer outline inside the cartouche and small leaf marks at its tips
+    canvas.save();
+    canvas.translate(cx, h / 2);
+    canvas.scale(0.955, 0.80);
+    canvas.translate(-cx, -h / 2);
+    canvas.drawPath(path, line..strokeWidth = 0.7);
+    canvas.restore();
+    line.strokeWidth = 1.3;
+    final dot = Paint()..color = tone;
+    for (final dx in [cx - cw - h * 0.36, cx + cw + h * 0.36]) {
+      canvas.drawCircle(Offset(dx, h / 2), h * 0.07, dot);
+      canvas.drawCircle(Offset(dx, h / 2), h * 0.12, line..strokeWidth = 0.8);
+      line.strokeWidth = 1.3;
+    }
+    // dotted band along the top and bottom edges
+    for (var x = 12.0; x < w - 12; x += 9) {
+      if ((x - cx).abs() < cw + h * 0.4) continue;
+      canvas.drawCircle(Offset(x, 7.5), 1.2, dot);
+      canvas.drawCircle(Offset(x, h - 7.5), 1.2, dot);
+    }
+
     // side rosettes and scrolls
     final sideW = (w - 2 * (cw + h * 0.36)) / 2;
     for (final sx in [sideW / 2, w - sideW / 2]) {

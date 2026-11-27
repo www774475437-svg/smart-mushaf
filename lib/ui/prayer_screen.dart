@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/prayer.dart';
+import '../services/widget_bridge.dart';
 import 'common.dart';
 
 class PrayerScreen extends StatefulWidget {
@@ -68,6 +69,7 @@ class _PrayerScreenState extends State<PrayerScreen> {
     } catch (_) {
       err = 'تعذّر تحديد الموقع. اسمح للتطبيق بمعرفة موقعك، أو أدخله يدويًّا.';
     }
+    WidgetBridge.schedule();
     if (mounted) setState(() => busy = false);
   }
 

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:home_widget/home_widget.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 import 'data/layout.dart';
@@ -12,7 +15,12 @@ import 'services/store.dart';
 import 'ui/common.dart';
 import 'ui/home.dart';
 import 'ui/index_screen.dart';
+import 'ui/khatma.dart';
 import 'ui/majlis.dart';
+import 'ui/prayer_screen.dart';
+import 'ui/reader.dart';
+import 'ui/tasmee.dart';
+import 'services/widget_bridge.dart';
 import 'ui/memorize.dart';
 import 'ui/settings_screen.dart';
 
@@ -120,6 +128,62 @@ class RootNav extends StatefulWidget {
 
 class _RootNavState extends State<RootNav> {
   int _i = 0;
+  StreamSubscription<Uri?>? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    if (WidgetBridge.supported) {
+      WidgetBridge.init();
+      HomeWidget.initiallyLaunchedFromHomeWidget().then(_fromWidget).catchError((_) {});
+      _sub = HomeWidget.widgetClicked.listen(_fromWidget, onError: (_) {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  /// A tap on a home-screen widget opens the matching place in the app.
+  void _fromWidget(Uri? u) {
+    if (u == null || !mounted) return;
+    void go(Widget w) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
+    final lp = UserStore.I.lastPage;
+    if (u.host == 'page') {
+      final n = int.tryParse(u.queryParameters['n'] ?? '') ?? lp;
+      final g = int.tryParse(u.queryParameters['g'] ?? '');
+      MushafScreen.open(context, n.clamp(1, 604), flashG: g);
+      return;
+    }
+    switch (u.queryParameters['to']) {
+      case 'pr':
+        go(const PrayerScreen());
+        break;
+      case 'kh':
+        go(const KhatmaScreen());
+        break;
+      case 'ts':
+        go(TasmeeScreen(page: lp));
+        break;
+      case 'rv':
+        setState(() => _i = 3);
+        break;
+      case 'mj':
+        setState(() => _i = 2);
+        break;
+      case 'pl':
+        final ids = QuranData.I.pageAyahs[lp];
+        if (ids.isNotEmpty) {
+          AudioCtl.I.playRange(ids.first, QuranData.I.surahEndG(QuranData.I.ayahs[ids.first].s), continueAfter: true);
+        }
+        MushafScreen.open(context, lp);
+        break;
+      default:
+        MushafScreen.open(context, lp);
+    }
+  }
 
   Widget _item(int i, IconData icon, IconData sel, String label) {
     final cs = Theme.of(context).colorScheme;

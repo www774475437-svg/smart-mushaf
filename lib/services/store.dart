@@ -38,6 +38,9 @@ class UserStore extends ChangeNotifier {
 
   /// Smart review of memorized surahs: surah -> [stage, due day number].
   Map<int, List<int>> review = {};
+
+  /// Memorization map: page -> 1 strong (green), 2 weak (yellow), 3 mistakes (red).
+  Map<int, int> pageStatus = {};
   static const List<int> reviewSteps = [3, 7, 30, 60];
   static int dayNumber([DateTime? d]) {
     final x = d ?? DateTime.now();
@@ -88,6 +91,8 @@ class UserStore extends ChangeNotifier {
         highlights = h.map((k, v) => MapEntry(int.parse(k), v as int));
         mistakes = (m['m'] as List? ?? []).map((e) => Mistake.fromJson(e as Map<String, dynamic>)).toList();
         memorized = Set<int>.from((m['mem'] as List? ?? []).map((e) => e as int));
+        final ps = m['ps'] as Map<String, dynamic>? ?? {};
+        pageStatus = ps.map((k, v) => MapEntry(int.parse(k), v as int));
         final rv = m['rv'] as Map<String, dynamic>? ?? {};
         review = rv.map((k, v) => MapEntry(int.parse(k), List<int>.from(v as List)));
         khatmaDays = m['kd'] as int? ?? 0;
@@ -114,6 +119,7 @@ class UserStore extends ChangeNotifier {
           'm': mistakes.map((e) => e.toJson()).toList(),
           'mem': memorized.toList(),
           'rv': review.map((k, v) => MapEntry(k.toString(), v)),
+          'ps': pageStatus.map((k, v) => MapEntry(k.toString(), v)),
           'kd': khatmaDays,
           'ks': khatmaStart,
           'kdn': khatmaDone.toList(),
@@ -165,6 +171,15 @@ class UserStore extends ChangeNotifier {
       fawasil.remove(color);
     } else {
       fawasil[color] = [g, DateTime.now().millisecondsSinceEpoch];
+    }
+    _save();
+  }
+
+  void setPageStatus(int page, int? st) {
+    if (st == null) {
+      pageStatus.remove(page);
+    } else {
+      pageStatus[page] = st;
     }
     _save();
   }
