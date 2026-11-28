@@ -351,7 +351,16 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     );
     final i = out.idx;
     final st = out.state;
-    if (i < idx) return; // never step back
+    // what has settled is not matched again: the next words are followed from here
+    final settle = !_quiet && (raw != null || heardWords.length - _from > 30);
+    if (i < idx) {
+      // never step back
+      if (settle) {
+        _from = heardWords.length;
+        _rebase();
+      }
+      return;
+    }
     if (i > idx) _lastProg = DateTime.now();
     idx = i;
     state
@@ -361,6 +370,10 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     if (!_quiet) {
       if (red > _redSeen && !widget.follow && AppSettings.I.tasVibrate) HapticFeedback.heavyImpact();
       _redSeen = red;
+    }
+    if (settle) {
+      _from = heardWords.length;
+      _rebase();
     }
     setState(() {});
     if (idx >= words.length && words.isNotEmpty) _pageDone();

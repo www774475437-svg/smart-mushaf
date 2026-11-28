@@ -143,9 +143,68 @@ class MatchOut {
   const MatchOut(this.idx, this.state);
 }
 
-/// Matches the whole transcript of a listening session again (a word the engine corrects later
-/// is corrected here too). [from], [baseIdx] and [baseState] are where the session started.
-/// [quiet]: the last words are still being said and may change.
+// How the following works. The letters heard since the last settled point are laid along the
+// letters of the mushaf from that point on (the cheapest way of turning one into the other), so
+// a word the engine garbled, glued to its neighbour or split in two never stops the following.
+// The reciter may go back and repeat (the laying may start up to [_back] words earlier), and a
+// word counts as skipped only when nothing at all was heard where its letters should be.
+const int _back = 14;
+const double _goodShare = 0.6, _badShare = 0.67;
+
+String _fold(String w) => w.replaceAll('ء', '');
+
+class _Lay {
+  final int cost, start, end;
+  final List<int> hit; // per mushaf letter: 0 nothing was said, 1 heard, 2 something else heard
+  final List<int> by; // per mushaf letter: the heard letter laid on it, or -1
+  _Lay(this.cost, this.start, this.end, this.hit, this.by);
+}
+
+_Lay _lay(List<int> h, List<int> e, int at) {
+  final n = h.length, m = e.length, w = m + 1;
+  final d = List<int>.filled((n + 1) * w, 0);
+  for (var b = 0; b <= m; b++) {
+    d[b] = b < at ? 1 : b - at;
+  }
+  for (var a = 1; a <= n; a++) {
+    final r = a * w, p = r - w, ha = h[a - 1];
+    d[r] = d[p] + 1;
+    for (var b = 1; b <= m; b++) {
+      var v = d[p + b - 1] + (e[b - 1] == ha ? 0 : 1);
+      final x = d[p + b] + 1;
+      if (x < v) v = x;
+      final y = d[r + b - 1] + 1;
+      if (y < v) v = y;
+      d[r + b] = v;
+    }
+  }
+  var end = 0;
+  final last = n * w;
+  for (var b = 1; b <= m; b++) {
+    if (d[last + b] <= d[last + end]) end = b;
+  }
+  final hit = List<int>.filled(m, 0), by = List<int>.filled(m, -1);
+  var a = n, b = end;
+  while (a > 0 && b > 0) {
+    final same = h[a - 1] == e[b - 1];
+    final v = d[a * w + b];
+    if (v == d[(a - 1) * w + b - 1] + (same ? 0 : 1)) {
+      hit[b - 1] = same ? 1 : 2;
+      by[b - 1] = a - 1;
+      a--;
+      b--;
+    } else if (v == d[(a - 1) * w + b] + 1) {
+      a--;
+    } else {
+      b--;
+    }
+  }
+  return _Lay(d[last + end], b, end, hit, by);
+}
+
+/// Follows the words heard since [from] (where the last settled result ended: the caller moves
+/// [from], [baseIdx] and [baseState] forward after every settled result). [quiet]: the last
+/// words are still being said and may change.
 MatchOut matchRecitation({
   required List<MWord> words,
   required List<String> heard,
@@ -157,95 +216,109 @@ MatchOut matchRecitation({
   int strict = 1,
   bool tashkeel = true,
 }) {
-  final hs = List<String>.of(heard);
-  var i = baseIdx;
   final st = Map<String, int>.of(baseState);
-  final missed = <String>[]; // heard words that matched nothing since the last match
-  bool eq(String h, int wi) => sameWord(h, words[wi].norm) || sameWord(h, words[wi].alt);
-  bool m(int hj, int wi) => hj < hs.length && wi < words.length && eq(hs[hj], wi);
-  void ok(int wi) => st[words[wi].key] ??= 1;
-  final tk = tashkeel && raw != null && raw.length == hs.length;
-  var j = from;
-  while (j < hs.length && i < words.length) {
-    final h = hs[j];
-    final e = words[i].norm;
-    if (eq(h, i)) {
-      // the words still being said may yet change: their vowels are judged once they settle
-      if (tk && h == normAr(raw[j]) && (!quiet || j < hs.length - 2) && st[words[i].key] == null &&
-          tashkeelDiffers(raw[j], words[i].text, skipLast: i + 1 >= words.length || words[i + 1].g != words[i].g)) {
-        st[words[i].key] = 4;
-      }
-      ok(i);
-      i++;
-      j++;
-      missed.clear();
-      continue;
+  if (baseIdx >= words.length || from >= heard.length) return MatchOut(baseIdx, st);
+  final h = <int>[], tok = <int>[];
+  for (var j = from; j < heard.length; j++) {
+    for (final c in _fold(heard[j]).codeUnits) {
+      h.add(c);
+      tok.add(j);
     }
-    // the engine glued two words together
-    if (e.length >= 2 && h.length > e.length + 1 && h.startsWith(e)) {
-      ok(i);
-      i++;
-      hs[j] = h.substring(e.length);
-      missed.clear();
-      continue;
-    }
-    if (e.length >= 3 && h.length > e.length + 1 && h.endsWith(e)) {
-      ok(i);
-      i++;
-      j++;
-      missed.clear();
-      continue;
-    }
-    // one word of the mushaf heard as two
-    if (j + 1 < hs.length && eq(h + hs[j + 1], i)) {
-      ok(i);
-      i++;
-      j += 2;
-      missed.clear();
-      continue;
-    }
-    // two words of the mushaf heard as one
-    if (i + 1 < words.length && (sameWord(h, e + words[i + 1].norm) || sameWord(h, words[i].alt + words[i + 1].alt))) {
-      ok(i);
-      ok(i + 1);
-      i += 2;
-      j++;
-      missed.clear();
-      continue;
-    }
-    // A word counts as skipped only when the words after it are then heard in order.
-    var jumped = false;
-    for (var k = 1; k <= 4 && !jumped; k++) {
-      if (i + k >= words.length) break;
-      final need = k + 2;
-      var got = 0;
-      var end = false;
-      for (var r = 0; r < need; r++) {
-        if (i + k + r >= words.length) {
-          end = true;
-          break;
-        }
-        if (!m(j + r, i + k + r)) break;
-        got++;
-      }
-      if (got == need || (end && got >= 2)) {
-        for (var x = 0; x < k; x++) {
-          final w = words[i + x];
-          // he said something close to it: the engine misheard, not a mistake
-          final lvl = strict;
-          final tried = lvl == 2
-              ? false
-              : (missed.any((u) => nearWord(u, w.norm) || nearWord(u, w.alt)) || (lvl == 0 && k == 1 && missed.isNotEmpty));
-          if (st[w.key] == null || st[w.key] == 2) st[w.key] = tried ? 1 : 2;
-        }
-        i += k;
-        missed.clear();
-        jumped = true;
-      }
-    }
-    if (jumped) continue;
-    missed.add(h);
-    j++;
   }
-  return MatchOut(i, st);
+  if (h.isEmpty) return MatchOut(baseIdx, st);
+  final wb = baseIdx - _back < 0 ? 0 : baseIdx - _back;
+  var we = baseIdx + (h.length / 2.2).floor() + 10;
+  if (we > words.length) we = words.length;
+  _Lay? lay;
+  var starts = <int>[], lens = <int>[];
+  for (var sp = 0; sp < 2; sp++) {
+    final e = <int>[], s = <int>[], l = <int>[];
+    for (var k = wb; k < we; k++) {
+      final p = _fold(sp == 0 ? words[k].norm : words[k].alt).codeUnits;
+      s.add(e.length);
+      l.add(p.length);
+      e.addAll(p);
+    }
+    final x = _lay(h, e, s[baseIdx - wb]);
+    if (lay == null || x.cost < lay.cost) {
+      lay = x;
+      starts = s;
+      lens = l;
+    }
+  }
+  final a = lay!;
+  if (a.end <= starts[baseIdx - wb]) return MatchOut(baseIdx, st);
+  bool good(int c, int len) => len <= 1 ? true : (len == 2 ? c >= 1 : c / len >= _goodShare);
+  bool bad(int c, int len, int z) {
+    if (strict == 2) return !good(c, len);
+    if (len <= 2) return false;
+    if (strict == 0) return z == len;
+    return z / len >= _badShare;
+  }
+
+  // every word the laying reached: [word, letters heard, letters, letters with nothing heard]
+  var res = <List<int>>[];
+  for (var k = baseIdx - wb; k < starts.length; k++) {
+    final s = starts[k], len = lens[k];
+    if (s >= a.end) break;
+    var c = 0, z = 0;
+    for (var x = s; x < s + len; x++) {
+      if (a.hit[x] == 1) c++;
+      if (a.hit[x] == 0) z++;
+    }
+    res.add([k + wb, c, len, z]);
+  }
+  bool red(List<int> r) => !good(r[1], r[2]) && bad(r[1], r[2], r[3]);
+  if (quiet) {
+    // the last words may still be being said: they wait for the next result
+    while (res.isNotEmpty && !good(res.last[1], res.last[2])) {
+      res.removeLast();
+    }
+    // and a word is not called skipped until the words after it have settled
+    for (var t = res.length - 2 < 0 ? 0 : res.length - 2; t < res.length; t++) {
+      if (red(res[t])) {
+        res = res.sublist(0, t);
+        break;
+      }
+    }
+  } else {
+    while (res.isNotEmpty && res.last[1] == 0) {
+      res.removeLast();
+    }
+  }
+  final tk = tashkeel && raw != null && raw.length == heard.length;
+  var idx = baseIdx;
+  for (final r in res) {
+    final w = words[r[0]];
+    var v = red(r) ? 2 : 1;
+    if (v == 1 && tk) {
+      // the vowels are judged only when the engine wrote this very word, whole, as one word
+      final s = starts[r[0] - wb];
+      var t = -1, one = r[2] > 0;
+      for (var x = s; x < s + r[2] && one; x++) {
+        final hb = a.by[x];
+        if (hb < 0) continue;
+        if (t == -1) t = tok[hb];
+        if (tok[hb] != t) one = false;
+      }
+      if (one && t >= 0 && (!quiet || t < heard.length - 2) && heard[t] == normAr(raw[t]) &&
+          (sameWord(heard[t], w.norm) || sameWord(heard[t], w.alt)) &&
+          tashkeelDiffers(raw[t], w.text, skipLast: r[0] + 1 >= words.length || words[r[0] + 1].g != w.g)) {
+        v = 4;
+      }
+    }
+    st[w.key] = v;
+    idx = r[0] + 1;
+  }
+  // a skipped word that is now read again, whole, is no longer red
+  for (var k = 0; k < baseIdx - wb; k++) {
+    final s = starts[k], len = lens[k];
+    if (st[words[k + wb].key] != 2 || len == 0 || s < a.start || s + len > a.end) continue;
+    var all = true;
+    for (var x = s; x < s + len; x++) {
+      if (a.hit[x] != 1) all = false;
+    }
+    if (all) st[words[k + wb].key] = 1;
+  }
+  return MatchOut(idx, st);
 }

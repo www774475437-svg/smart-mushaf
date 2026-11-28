@@ -8,7 +8,7 @@ import '../lib/services/recite_matcher.dart';
 void main(List<String> args) {
   final data = jsonDecode(File(args[0]).readAsStringSync()) as Map<String, dynamic>;
   final strict = args.length > 1 ? int.parse(args[1]) : 1;
-  var tw = 0, tRed = 0, tBlue = 0, tLeft = 0;
+  var tw = 0, tRed = 0, tBlue = 0, tLeft = 0, tFlick = 0;
   final lags = <double>[];
   print('model ${data['model']}  strict $strict');
   print('case | words | not reached | red | blue | lag after ayah (avg / worst, s)');
@@ -33,9 +33,10 @@ void main(List<String> args) {
     }
     final ends = (c['ends'] as Map).cast<String, dynamic>();
     final doneAt = <int, double>{};
-    var idx = 0, done = '';
-    var state = <String, int>{};
+    var idx = 0, done = '', from = 0, baseIdx = 0;
+    var state = <String, int>{}, baseState = <String, int>{};
     var lastRaw = <String>[];
+    final everRed = <String>{};
     for (final e in c['events'] as List) {
       final at = (e[0] as num).toDouble();
       final fin = e[1] == 'f';
@@ -43,14 +44,26 @@ void main(List<String> args) {
       if (fin) done = heard;
       final raw = heard.split(' ').where((w) => normAr(w).isNotEmpty).toList();
       lastRaw = raw;
-      final out = matchRecitation(words: words, heard: raw.map(normAr).toList(), raw: raw, quiet: !fin, strict: strict);
-      if (out.idx < idx) continue;
-      idx = out.idx;
-      state = out.state;
+      final out = matchRecitation(
+          words: words, heard: raw.map(normAr).toList(), raw: raw, from: from, baseIdx: baseIdx, baseState: baseState, quiet: !fin, strict: strict);
+      if (out.idx >= idx) {
+        idx = out.idx;
+        state = out.state;
+      }
+      if (fin) {
+        // the same as the app: what is settled is never matched again
+        from = raw.length;
+        baseIdx = idx;
+        baseState = Map.of(state);
+      }
+      state.forEach((k, v) {
+        if (v == 2) everRed.add(k);
+      });
       lastOf.forEach((g, k) {
         if (idx > k) doneAt.putIfAbsent(g, () => at);
       });
     }
+    tFlick += everRed.where((k) => state[k] != 2).length;
     final red = [for (final w in words) if (state[w.key] == 2) w];
     final blue = [for (final w in words) if (state[w.key] == 4) w];
     final cl = <double>[];
@@ -72,6 +85,6 @@ void main(List<String> args) {
   lags.sort();
   final med = lags.isEmpty ? 0 : lags[lags.length ~/ 2];
   final p90 = lags.isEmpty ? 0 : lags[(lags.length * 0.9).floor().clamp(0, lags.length - 1)];
-  print('TOTAL words $tw | not reached $tLeft | wrongly red $tRed (${(100 * tRed / tw).toStringAsFixed(2)}%) | '
+  print('TOTAL words $tw | not reached $tLeft (${(100 * tLeft / tw).toStringAsFixed(2)}%) | red that came and went $tFlick | wrongly red $tRed (${(100 * tRed / tw).toStringAsFixed(2)}%) | '
       'wrongly blue $tBlue (${(100 * tBlue / tw).toStringAsFixed(2)}%) | lag median ${med.toStringAsFixed(1)}s, 90% under ${p90.toStringAsFixed(1)}s');
 }
