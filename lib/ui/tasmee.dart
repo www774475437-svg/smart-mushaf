@@ -43,6 +43,8 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   bool listening = false;
   int _from = 0, _lastLen = 0, _baseIdx = 0;
   Map<String, int> _baseState = {};
+  int _junk = 0, _peak = 0; // stray letters heard since the last progress (settled / in a guess)
+  final Set<String> _seen = {}; // words heard well in a guess
   String heard = '';
   String? err;
   bool peekAll = false;
@@ -120,6 +122,9 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     _lastLen = 0;
     _baseIdx = 0;
     _baseState = {};
+    _junk = 0;
+    _peak = 0;
+    _seen.clear();
     heard = '';
     peekAll = false;
     _redSeen = 0;
@@ -338,6 +343,8 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
       _rebase();
     }
     _lastLen = heardWords.length;
+    // what has settled is not matched again: the next words are followed from here
+    final settle = !_quiet && (raw != null || heardWords.length - _from > 30);
     final out = matchRecitation(
       words: words,
       heard: heardWords,
@@ -348,11 +355,21 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
       quiet: _quiet,
       strict: AppSettings.I.tasStrict,
       tashkeel: AppSettings.I.tasTashkeel && !widget.follow,
+      junk: settle && _peak > _junk ? _peak : _junk,
+      seen: _seen,
     );
     final i = out.idx;
     final st = out.state;
-    // what has settled is not matched again: the next words are followed from here
-    final settle = !_quiet && (raw != null || heardWords.length - _from > 30);
+    if (settle) {
+      _junk = out.junk;
+      _peak = 0;
+    } else if (i == _baseIdx) {
+      if (out.junk > _peak) _peak = out.junk;
+    } else if (i >= idx) {
+      st.forEach((k, v) {
+        if (v == 1) _seen.add(k);
+      });
+    }
     if (i < idx) {
       // never step back
       if (settle) {

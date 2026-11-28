@@ -33,10 +33,10 @@ void main(List<String> args) {
     }
     final ends = (c['ends'] as Map).cast<String, dynamic>();
     final doneAt = <int, double>{};
-    var idx = 0, done = '', from = 0, baseIdx = 0;
+    var idx = 0, done = '', from = 0, baseIdx = 0, junk = 0, peak = 0;
     var state = <String, int>{}, baseState = <String, int>{};
     var lastRaw = <String>[];
-    final everRed = <String>{};
+    final everRed = <String>{}, seen = <String>{};
     for (final e in c['events'] as List) {
       final at = (e[0] as num).toDouble();
       final fin = e[1] == 'f';
@@ -44,17 +44,34 @@ void main(List<String> args) {
       if (fin) done = heard;
       final raw = heard.split(' ').where((w) => normAr(w).isNotEmpty).toList();
       lastRaw = raw;
+      // the same bookkeeping as the app (lib/ui/tasmee.dart, _consume)
       final out = matchRecitation(
-          words: words, heard: raw.map(normAr).toList(), raw: raw, from: from, baseIdx: baseIdx, baseState: baseState, quiet: !fin, strict: strict);
+          words: words,
+          heard: raw.map(normAr).toList(),
+          raw: raw,
+          from: from,
+          baseIdx: baseIdx,
+          baseState: baseState,
+          quiet: !fin,
+          strict: strict,
+          junk: fin && peak > junk ? peak : junk,
+          seen: seen);
       if (out.idx >= idx) {
         idx = out.idx;
         state = out.state;
       }
       if (fin) {
-        // the same as the app: what is settled is never matched again
+        junk = out.junk;
+        peak = 0;
         from = raw.length;
         baseIdx = idx;
         baseState = Map.of(state);
+      } else if (out.idx == baseIdx) {
+        if (out.junk > peak) peak = out.junk;
+      } else if (out.idx >= idx) {
+        out.state.forEach((k, v) {
+          if (v == 1) seen.add(k);
+        });
       }
       state.forEach((k, v) {
         if (v == 2) everRed.add(k);

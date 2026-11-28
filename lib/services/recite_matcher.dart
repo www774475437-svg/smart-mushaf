@@ -140,40 +140,47 @@ class MatchOut {
 
   /// word key -> 1 read, 2 skipped, 4 read with a wrong vowel
   final Map<String, int> state;
-  const MatchOut(this.idx, this.state);
+
+  /// letters heard since the last progress that landed nowhere on the page
+  final int junk;
+  const MatchOut(this.idx, this.state, [this.junk = 0]);
 }
 
 // How the following works. The letters heard since the last settled point are laid along the
 // letters of the mushaf from that point on (the cheapest way of turning one into the other), so
 // a word the engine garbled, glued to its neighbour or split in two never stops the following.
-// The reciter may go back and repeat (the laying may start up to [_back] words earlier), and a
-// word counts as skipped only when nothing at all was heard where its letters should be.
-const int _back = 14;
-const double _goodShare = 0.6, _badShare = 0.67;
+// The reciter may go back and repeat (the laying may start up to [_back] words earlier) or the
+// engine may have missed some words (the laying may start further on, for a small price). A
+// result counts only when enough of what was heard lands on the page; a word counts as skipped
+// only when nothing was heard where its letters should be and no stray sounds were heard
+// before it. The numbers were chosen on whole pages read by 16 reciters (tool/eval_matcher).
+const int _back = 14, _far = 80, _jumpWords = 3, _jumpMin = 8, _cap = 12;
+const double _goodShare = 0.6, _badShare = 0.67, _accept = 0.5, _acceptJump = 0.7, _tried = 0.5;
 
 String _fold(String w) => w.replaceAll('ء', '');
 
 class _Lay {
-  final int cost, start, end;
+  final int cost, start, end, at;
   final List<int> hit; // per mushaf letter: 0 nothing was said, 1 heard, 2 something else heard
   final List<int> by; // per mushaf letter: the heard letter laid on it, or -1
-  _Lay(this.cost, this.start, this.end, this.hit, this.by);
+  final List<int> starts, lens;
+  _Lay(this.cost, this.start, this.end, this.at, this.hit, this.by, this.starts, this.lens);
 }
 
-_Lay _lay(List<int> h, List<int> e, int at) {
+_Lay _lay(List<int> h, List<int> e, int at, List<int> starts, List<int> lens) {
   final n = h.length, m = e.length, w = m + 1;
   final d = List<int>.filled((n + 1) * w, 0);
   for (var b = 0; b <= m; b++) {
-    d[b] = b < at ? 1 : b - at;
+    d[b] = b < at ? 4 : (b == at ? 0 : 4 + (b - at > _cap ? _cap : b - at));
   }
   for (var a = 1; a <= n; a++) {
     final r = a * w, p = r - w, ha = h[a - 1];
-    d[r] = d[p] + 1;
+    d[r] = d[p] + 4;
     for (var b = 1; b <= m; b++) {
-      var v = d[p + b - 1] + (e[b - 1] == ha ? 0 : 1);
-      final x = d[p + b] + 1;
+      var v = d[p + b - 1] + (e[b - 1] == ha ? 0 : 4);
+      final x = d[p + b] + 4;
       if (x < v) v = x;
-      final y = d[r + b - 1] + 1;
+      final y = d[r + b - 1] + 4;
       if (y < v) v = y;
       d[r + b] = v;
     }
@@ -188,23 +195,24 @@ _Lay _lay(List<int> h, List<int> e, int at) {
   while (a > 0 && b > 0) {
     final same = h[a - 1] == e[b - 1];
     final v = d[a * w + b];
-    if (v == d[(a - 1) * w + b - 1] + (same ? 0 : 1)) {
+    if (v == d[(a - 1) * w + b - 1] + (same ? 0 : 4)) {
       hit[b - 1] = same ? 1 : 2;
       by[b - 1] = a - 1;
       a--;
       b--;
-    } else if (v == d[(a - 1) * w + b] + 1) {
+    } else if (v == d[(a - 1) * w + b] + 4) {
       a--;
     } else {
       b--;
     }
   }
-  return _Lay(d[last + end], b, end, hit, by);
+  return _Lay(d[last + end], b, end, at, hit, by, starts, lens);
 }
 
 /// Follows the words heard since [from] (where the last settled result ended: the caller moves
-/// [from], [baseIdx] and [baseState] forward after every settled result). [quiet]: the last
-/// words are still being said and may change.
+/// [from], [baseIdx], [baseState] and [junk] forward after every settled result).
+/// [quiet]: the last words are still being said and may change.
+/// [seen]: words that were heard well in an earlier guess of the same stretch.
 MatchOut matchRecitation({
   required List<MWord> words,
   required List<String> heard,
@@ -215,9 +223,11 @@ MatchOut matchRecitation({
   bool quiet = false,
   int strict = 1,
   bool tashkeel = true,
+  int junk = 0,
+  Set<String> seen = const {},
 }) {
   final st = Map<String, int>.of(baseState);
-  if (baseIdx >= words.length || from >= heard.length) return MatchOut(baseIdx, st);
+  if (baseIdx >= words.length || from >= heard.length) return MatchOut(baseIdx, st, junk);
   final h = <int>[], tok = <int>[];
   for (var j = from; j < heard.length; j++) {
     for (final c in _fold(heard[j]).codeUnits) {
@@ -225,29 +235,59 @@ MatchOut matchRecitation({
       tok.add(j);
     }
   }
-  if (h.isEmpty) return MatchOut(baseIdx, st);
+  if (h.isEmpty) return MatchOut(baseIdx, st, junk);
   final wb = baseIdx - _back < 0 ? 0 : baseIdx - _back;
-  var we = baseIdx + (h.length / 2.2).floor() + 10;
-  if (we > words.length) we = words.length;
-  _Lay? lay;
-  var starts = <int>[], lens = <int>[];
-  for (var sp = 0; sp < 2; sp++) {
-    final e = <int>[], s = <int>[], l = <int>[];
-    for (var k = wb; k < we; k++) {
-      final p = _fold(sp == 0 ? words[k].norm : words[k].alt).codeUnits;
-      s.add(e.length);
-      l.add(p.length);
-      e.addAll(p);
+  final b0 = baseIdx - wb;
+  _Lay lay(int ahead) {
+    var we = baseIdx + (h.length / 2.2).floor() + ahead;
+    if (we > words.length) we = words.length;
+    _Lay? best;
+    for (var sp = 0; sp < 2; sp++) {
+      final e = <int>[], s = <int>[], l = <int>[];
+      for (var k = wb; k < we; k++) {
+        final p = _fold(sp == 0 ? words[k].norm : words[k].alt).codeUnits;
+        s.add(e.length);
+        l.add(p.length);
+        e.addAll(p);
+      }
+      final x = _lay(h, e, s[b0], s, l);
+      if (best == null || x.cost < best.cost) best = x;
     }
-    final x = _lay(h, e, s[baseIdx - wb]);
-    if (lay == null || x.cost < lay.cost) {
-      lay = x;
-      starts = s;
-      lens = l;
+    return best!;
+  }
+
+  // the word the laying starts in, and whether enough of what was heard landed on the page
+  int first(_Lay a) {
+    var k = b0;
+    while (k + 1 < a.starts.length && a.starts[k + 1] <= a.start) {
+      k++;
+    }
+    return k;
+  }
+
+  bool counts(_Lay a) {
+    if (a.end <= a.at) return false;
+    var got = 0;
+    for (var x = a.start; x < a.end; x++) {
+      if (a.hit[x] == 1) got++;
+    }
+    final jump = a.start > a.at ? first(a) - b0 : 0;
+    if (jump > _jumpWords && h.length < _jumpMin) return false;
+    return got / h.length >= (jump > _jumpWords ? _acceptJump : _accept);
+  }
+
+  var a = lay(10);
+  var ok = counts(a);
+  if (!ok && h.length >= _jumpMin) {
+    final f = lay(_far);
+    if (counts(f)) {
+      a = f;
+      ok = true;
     }
   }
-  final a = lay!;
-  if (a.end <= starts[baseIdx - wb]) return MatchOut(baseIdx, st);
+  if (!ok) return MatchOut(baseIdx, st, junk + h.length);
+  final starts = a.starts, lens = a.lens;
+  final k0 = a.start > a.at ? first(a) : b0;
   bool good(int c, int len) => len <= 1 ? true : (len == 2 ? c >= 1 : c / len >= _goodShare);
   bool bad(int c, int len, int z) {
     if (strict == 2) return !good(c, len);
@@ -256,9 +296,15 @@ MatchOut matchRecitation({
     return z / len >= _badShare;
   }
 
+  // the words jumped over were said but garbled by the engine, when enough stray letters came
+  var over = 0;
+  for (var k = b0; k < k0; k++) {
+    over += lens[k];
+  }
+  final tried = k0 > b0 && strict != 2 && junk >= over * _tried;
   // every word the laying reached: [word, letters heard, letters, letters with nothing heard]
   var res = <List<int>>[];
-  for (var k = baseIdx - wb; k < starts.length; k++) {
+  for (var k = b0; k < starts.length; k++) {
     final s = starts[k], len = lens[k];
     if (s >= a.end) break;
     var c = 0, z = 0;
@@ -291,6 +337,7 @@ MatchOut matchRecitation({
   for (final r in res) {
     final w = words[r[0]];
     var v = red(r) ? 2 : 1;
+    if (v == 2 && ((tried && r[0] - wb < k0) || (strict != 2 && seen.contains(w.key)))) v = 1;
     if (v == 1 && tk) {
       // the vowels are judged only when the engine wrote this very word, whole, as one word
       final s = starts[r[0] - wb];
@@ -311,7 +358,7 @@ MatchOut matchRecitation({
     idx = r[0] + 1;
   }
   // a skipped word that is now read again, whole, is no longer red
-  for (var k = 0; k < baseIdx - wb; k++) {
+  for (var k = 0; k < b0; k++) {
     final s = starts[k], len = lens[k];
     if (st[words[k + wb].key] != 2 || len == 0 || s < a.start || s + len > a.end) continue;
     var all = true;
@@ -320,5 +367,5 @@ MatchOut matchRecitation({
     }
     if (all) st[words[k + wb].key] = 1;
   }
-  return MatchOut(idx, st);
+  return MatchOut(idx, st, idx > baseIdx ? 0 : junk);
 }
