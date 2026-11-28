@@ -50,9 +50,31 @@ def run(audio, max_speech, min_sil, thr, buf):
     print('  ' + ' '.join(f'{s[0]:.0f}+{s[1]:.0f}' for s in segs))
 
 
-for p, folder in [(293, 'Abu_Bakr_Ash-Shaatree_128kbps'), (2, 'Abdurrahmaan_As-Sudais_192kbps'), (604, 'Hani_Rifai_192kbps'), (2, 'Husary_64kbps')]:
+sys.path.insert(0, 'tool')
+from gate import Gate
+
+
+def gate(audio, name):
+    g = Gate()
+    line, segs, on, t = [], [], 0, 0
+    for i in range(0, len(audio) - 511, 512):
+        for x in g.feed(audio[i:i + 512]):
+            segs.append(len(x) / 16000)
+        on += g.speaking()
+        if i % 16000 < 512:
+            line.append('#' if g.speaking() else '.')
+    for x in g.flush():
+        segs.append(len(x) / 16000)
+    print(f' loudness gate, {name}: speaking {on * 512 / 16000:.0f}s of {len(audio) / 16000:.0f}s, {len(segs)} stretches, longest {max(segs or [0]):.1f}s, shorter than 1s: {sum(1 for x in segs if x < 1)}')
+    print('  ' + ''.join(line))
+
+
+rng = np.random.default_rng(1)
+for p, folder in [(293, 'Abu_Bakr_Ash-Shaatree_128kbps'), (2, 'Abdurrahmaan_As-Sudais_192kbps'), (604, 'Hani_Rifai_192kbps'), (2, 'Husary_64kbps'), (446, 'Alafasy_64kbps'), (582, 'Minshawy_Murattal_128kbps')]:
     print(p, folder)
     a = page_audio(p, folder)
-    for cfg in [(8, 0.35, 0.5, 60), (8, 0.35, 0.5, 20), (20, 0.35, 0.5, 60), (8, 0.35, 0.3, 60), (8, 0.2, 0.5, 60), (4, 0.35, 0.5, 60)]:
-        run(a, *cfg)
-    run(a / max(1e-6, np.abs(a).max()) * 0.9, 8, 0.35, 0.5, 60)
+    run(a, 8, 0.35, 0.5, 60)
+    gate(a, 'clean')
+    gate((a * 0.5 + rng.normal(0, 0.003, len(a))).astype(np.float32), 'room')
+    gate((a * 0.35 + rng.normal(0, 0.012, len(a))).astype(np.float32), 'noisy')
+    gate((a * 0.05 + rng.normal(0, 0.001, len(a))).astype(np.float32), 'far and faint')
