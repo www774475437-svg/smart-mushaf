@@ -1,0 +1,31 @@
+name: Voice detector check
+on:
+  push:
+    branches: [dbg]
+jobs:
+  dbg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            assets/data
+            assets/fonts
+            assets/qcf
+          key: quran-data-${{ hashFiles('tool/build_data.py') }}
+      - run: test -f assets/data/layout2.json.gz || python3 tool/build_data.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/cache/restore@v4
+        with:
+          path: aud
+          key: recitations-v1-none
+          restore-keys: recitations-v1-
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pip install -q sherpa-onnx librosa numpy soundfile
+          mkdir vad && gh release download asr-quran-base -R www774475437-svg/smart-mushaf-store -D vad -p silero_vad.onnx
+          python tool/vad_dbg.py
