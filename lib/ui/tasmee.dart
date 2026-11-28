@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../data/layout.dart';
@@ -82,7 +83,11 @@ class TasmeeScreen extends StatefulWidget {
   /// Reading along: the page stays visible, the words turn green as they are read aloud,
   /// and the next page opens by itself. Nothing is counted as a mistake.
   final bool follow;
-  const TasmeeScreen({super.key, required this.page, this.follow = false});
+
+  /// Reciting a whole surah or juz: from this ayah to that one, page after page.
+  final int? fromG, toG;
+  final String? rangeName;
+  const TasmeeScreen({super.key, required this.page, this.follow = false, this.fromG, this.toG, this.rangeName});
   @override
   State<TasmeeScreen> createState() => _TasmeeScreenState();
 }
@@ -101,6 +106,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   String heard = '';
   String? err;
   bool peekAll = false;
+  int _rangeWrong = 0, _redSeen = 0;
 
   @override
   void initState() {
@@ -126,6 +132,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     _baseState = {};
     heard = '';
     peekAll = false;
+    _redSeen = 0;
     if (!MushafLayout.I.ready) return;
     final q = QuranData.I;
     final lines = MushafLayout.I.pages[page - 1];
@@ -162,7 +169,15 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
         final clean = q.cleanWords(w.g);
         total[w.g] ??= _ayahWordCount(w.g);
         final norm = (clean.length == total[w.g] && p < clean.length) ? clean[p] : normalizeAr(w.t);
+        if (widget.toG != null && w.g > widget.toG!) continue; // past the end of the surah or juz
         words.add(_W('$i:$k', w.g, norm, w.t));
+      }
+    }
+    // what comes before the start of the surah or juz is not asked for
+    if (widget.fromG != null) {
+      while (idx < words.length && words[idx].g < widget.fromG!) {
+        state[words[idx].key] = 1;
+        idx++;
       }
     }
   }
@@ -334,6 +349,9 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     state
       ..clear()
       ..addAll(st);
+    final red = st.values.where((v) => v == 2).length;
+    if (red > _redSeen && !widget.follow) HapticFeedback.heavyImpact();
+    _redSeen = red;
     setState(() {});
     if (idx >= words.length && words.isNotEmpty) _pageDone();
   }
@@ -378,6 +396,22 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     _saveMistakes();
     UserStore.I.setPageStatus(page, wrong == 0 ? 1 : (wrong <= 3 ? 2 : 3));
     UserStore.I.logTasmee(wrong);
+    _rangeWrong += wrong;
+    if (wrong == 0) SystemSound.play(SystemSoundType.click);
+    if (widget.toG != null) {
+      final more = page < 604 && QuranData.I.pageAyahs[page + 1].isNotEmpty && QuranData.I.pageAyahs[page + 1].first <= widget.toG!;
+      if (more) {
+        _go(1);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _listen();
+        });
+        return;
+      }
+      toast(context, _rangeWrong == 0
+          ? 'أحسنت! أتممت ${widget.rangeName ?? 'التسميع'} بلا أخطاء'
+          : 'أتممت ${widget.rangeName ?? 'التسميع'} • ${ar(_rangeWrong)} كلمة تحتاج مراجعة');
+      return;
+    }
     toast(context, wrong == 0 ? 'أحسنت! أتممت الصفحة بلا أخطاء' : 'أتممت الصفحة • ${ar(wrong)} كلمة تحتاج مراجعة');
   }
 
@@ -409,7 +443,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
         backgroundColor: col.soft,
         title: Column(
           children: [
-            Text(widget.follow ? 'القراءة بالمتابعة • صفحة ${ar(page)}' : 'تسميع صفحة ${ar(page)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            Text(widget.follow ? 'القراءة بالمتابعة • صفحة ${ar(page)}' : widget.rangeName != null ? 'تسميع ${widget.rangeName} • صفحة ${ar(page)}' : 'تسميع صفحة ${ar(page)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             Text(widget.follow ? 'سورة ${surahName(q.surahOfPage(page))} • قرأت ${ar(okN + badN)} كلمة' : 'سورة ${surahName(q.surahOfPage(page))} • صحيح ${ar(okN)} • خطأ ${ar(badN)}',
                 style: const TextStyle(fontSize: 11.5, color: kGoldDeep)),
           ],

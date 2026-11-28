@@ -5,6 +5,7 @@ import '../data/surah_names.dart';
 import '../services/store.dart';
 import 'common.dart';
 import 'hajuri.dart';
+import 'hifz_extras.dart';
 import 'hifz_plan.dart';
 import 'khatma.dart';
 import 'quiz.dart';
@@ -52,6 +53,12 @@ class MoreScreen extends StatelessWidget {
                 title: 'سمِّع داخل المصحف',
                 onTap: () => go(TasmeeScreen(page: UserStore.I.lastPage))),
             GroupTile(
+                icon: Icons.spatial_audio_off_rounded,
+                color: const Color(0xFFAD1457),
+                title: 'تسميع سورة أو جزء كامل',
+                subtitle: 'من أول آية إلى آخرها والصفحات تنتقل وحدها',
+                onTap: () => showTasmeeRangeSheet(context)),
+            GroupTile(
                 icon: Icons.hearing_rounded,
                 color: const Color(0xFF00838F),
                 title: 'القراءة بالمتابعة',
@@ -61,6 +68,18 @@ class MoreScreen extends StatelessWidget {
             GroupTile(icon: Icons.groups_rounded, color: kEmeraldDark, title: 'مجلس الحفاظ', onTap: () => tab(2)),
           ]),
           GroupCard(title: 'الاختبارات والمتابعة', children: [
+            GroupTile(
+                icon: Icons.school_rounded,
+                color: kEmerald,
+                title: 'اختبار الحفظ',
+                subtitle: 'ثمانية أنواع: التالية والسابقة والكلمة الناقصة والترتيب وغيرها',
+                onTap: () => go(const QuizScreen(kind: 2))),
+            GroupTile(
+                icon: Icons.fact_check_rounded,
+                color: const Color(0xFFC62828),
+                title: 'أسئلة أخطائي',
+                subtitle: 'ما أخطأت فيه يعود أسئلةً حتى تتقنه',
+                onTap: () => go(const QuizScreen(kind: 3))),
             GroupTile(
                 icon: Icons.quiz_rounded,
                 color: const Color(0xFF6A4C93),
@@ -79,6 +98,18 @@ class MoreScreen extends StatelessWidget {
                 title: 'التقرير الأسبوعي',
                 subtitle: 'ما قرأته وسمّعته في سبعة أيام',
                 onTap: () => go(const WeeklyReportScreen())),
+            GroupTile(
+                icon: Icons.workspace_premium_rounded,
+                color: const Color(0xFFB8860B),
+                title: 'الأهداف والأوسمة',
+                subtitle: 'ما أنجزته وما بقي لك',
+                onTap: () => go(const AchievementsScreen())),
+            GroupTile(
+                icon: Icons.backup_rounded,
+                color: const Color(0xFF455A64),
+                title: 'النسخ الاحتياطي',
+                subtitle: 'احفظ بياناتك واسترجعها',
+                onTap: () => go(const BackupScreen())),
           ]),
           GroupCard(title: 'القراءة والاستماع', children: [
             GroupTile(icon: Icons.mic_external_on_rounded, color: const Color(0xFF6A4C93), title: 'القرّاء', onTap: () => go(const RecitersScreen())),

@@ -319,6 +319,41 @@ class UserStore extends ChangeNotifier {
     _save();
   }
 
+  /// A question about a past mistake was answered: a right answer wears the mistake down
+  /// until it is gone, a wrong one makes it heavier.
+  void mistakeAnswered(int g, bool right) {
+    final i = mistakes.indexWhere((m) => m.g == g);
+    if (i < 0) return;
+    final old = mistakes[i];
+    final n = right ? old.count - 1 : old.count + 1;
+    if (n <= 0) {
+      mistakes.removeAt(i);
+    } else {
+      mistakes[i] = Mistake(g, old.missing, n.clamp(1, 5), old.time);
+    }
+    _save();
+  }
+
+  /// Everything the user saved, as text, to keep a copy outside the phone.
+  String exportJson() => jsonEncode({'app': 'smart-mushaf', 'v': 1, 'lastPage': lastPage, 'store': _p.getString('userStore') ?? '{}'});
+
+  /// Puts back a copy made by [exportJson]. False when the text is not such a copy.
+  Future<bool> importJson(String text) async {
+    try {
+      final m = jsonDecode(text.trim()) as Map<String, dynamic>;
+      if (m['app'] != 'smart-mushaf') return false;
+      final store = m['store'] as String;
+      jsonDecode(store) as Map<String, dynamic>;
+      await _p.setString('userStore', store);
+      await _p.setInt('lastPage', (m['lastPage'] as int? ?? 1).clamp(1, 604));
+      await init();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   void removeMistake(int g) {
     mistakes.removeWhere((m) => m.g == g);
     _save();

@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../data/quran.dart';
 import '../data/surah_names.dart';
@@ -16,8 +17,21 @@ class _Question {
   const _Question(this.title, this.prompt, this.options, this.correct, this.g, {this.quranOptions = true});
 }
 
-/// Multiple-choice tests that work without a microphone.
-/// [kind] 0: complete the ayah, 1: similar ayahs (المتشابهات).
+const List<String> kQuizTypes = [
+  'كل الأنواع',
+  'أكمل الآية',
+  'الآية التالية',
+  'الآية السابقة',
+  'اسم السورة',
+  'الكلمة الناقصة',
+  'ترتيب الآيات',
+  'بداية الصفحة',
+  'بداية الجزء',
+];
+
+/// Multiple-choice tests that work without a microphone and without the internet.
+/// [kind] 0: complete the ayah, 1: similar ayahs (المتشابهات), 2: the full memorization
+/// test with every kind of question, 3: questions made from the user's own mistakes.
 class QuizScreen extends StatefulWidget {
   final int kind;
   const QuizScreen({super.key, required this.kind});
@@ -34,6 +48,8 @@ class _QuizScreenState extends State<QuizScreen> {
   int? chosen;
   int right = 0, total = 0;
   bool _started = false;
+  int _askedG = -1;
+  int type = 0; // kind 2: which kind of question, 0 for all
 
   @override
   void initState() {
@@ -60,7 +76,9 @@ class _QuizScreenState extends State<QuizScreen> {
 
   void _rebuild() {
     final q = QuranData.I;
-    if (scope == 0) {
+    if (widget.kind == 3) {
+      pool = [for (final m in UserStore.I.mistakes) m.g];
+    } else if (scope == 0) {
       pool = _myPool();
     } else if (scope == 1) {
       final from = q.juzStartG[juz];
@@ -126,6 +144,118 @@ class _QuizScreenState extends State<QuizScreen> {
         [q.ayahs[g + 1].text, for (final x in sim) if (x + 1 < q.ayahs.length) q.ayahs[x + 1].text, for (final x in _near(g + 1, 6)) q.ayahs[x].text], g + 1);
   }
 
+  String _short(int g) {
+    final w = _words(g);
+    return w.length <= 9 ? w.join(' ') : '${w.take(9).join(' ')} …';
+  }
+
+  _Question? _previous(int g) {
+    final q = QuranData.I;
+    if (g <= q.surahStart[q.ayahs[g].s]) return null;
+    return _make('ما الآية التي قبلها؟', q.ayahs[g].text,
+        [q.ayahs[g - 1].text, for (final x in _near(g - 1, 6)) q.ayahs[x].text], g - 1);
+  }
+
+  _Question? _whichSurah(int g) {
+    final q = QuranData.I;
+    final s = q.ayahs[g].s;
+    if (_words(g).length < 4) return null;
+    final c = <int>[s];
+    // the surahs next to it are the ones most easily mixed up with it
+    for (final d in [1, -1, 2, -2, 3]) {
+      if (s + d >= 1 && s + d <= 114 && c.length < 4 && _rnd.nextBool()) c.add(s + d);
+    }
+    while (c.length < 4) {
+      final r = 1 + _rnd.nextInt(114);
+      if (!c.contains(r)) c.add(r);
+    }
+    return _make('في أي سورة هذه الآية؟', q.ayahs[g].text, [for (final x in c) 'سورة ${surahName(x)}'], g, quran: false);
+  }
+
+  _Question? _missing(int g) {
+    final w = _words(g);
+    if (w.length < 5) return null;
+    final i = 1 + _rnd.nextInt(w.length - 2);
+    final others = <String>[];
+    for (final x in _near(g, 8)) {
+      final ww = _words(x);
+      if (ww.length > 2) others.add(ww[_rnd.nextInt(ww.length)]);
+    }
+    final shown = [...w]..[i] = '⋯⋯';
+    return _make('ما الكلمة الناقصة؟', shown.join(' '), [w[i], ...others], g);
+  }
+
+  _Question? _order(int g) {
+    final q = QuranData.I;
+    final s = q.ayahs[g].s;
+    final from = q.surahStart[s], to = q.surahEndG(s);
+    if (to - from < 4) return null;
+    final picks = <int>{g};
+    for (var i = 0; i < 40 && picks.length < 4; i++) {
+      picks.add(from + _rnd.nextInt(to - from + 1));
+    }
+    if (picks.length < 4) return null;
+    final sorted = picks.toList()..sort();
+    return _make('أي هذه الآيات تأتي أولًا في سورة ${surahName(s)}؟', 'رتّبها في ذهنك ثم اختر أولها',
+        [for (final x in sorted) _short(x)], sorted.first);
+  }
+
+  _Question? _pageStart(int g) {
+    final q = QuranData.I;
+    final page = q.ayahs[g].page;
+    final ids = q.pageAyahs[page];
+    if (ids.length < 2) return null;
+    final first = ids.first;
+    return _make('ما أول آية في الصفحة ${ar(page)}؟', 'سورة ${surahName(q.ayahs[first].s)} • الجزء ${ar(q.ayahs[first].juz)}',
+        [_short(first), for (final x in ids.skip(1).take(2)) _short(x), if (page > 1) _short(q.pageAyahs[page - 1].first), if (page < 604) _short(q.pageAyahs[page + 1].first)],
+        first);
+  }
+
+  _Question? _juzStart(int g) {
+    final q = QuranData.I;
+    final j = q.ayahs[g].juz;
+    final first = q.juzStartG[j];
+    return _make('بأي آية يبدأ الجزء ${ar(j)}؟', 'اختر الآية الأولى من الجزء',
+        [_short(first), if (j > 1) _short(q.juzStartG[j - 1]), if (j < 30) _short(q.juzStartG[j + 1]), _short(first + 1), _short(first + 2)], first);
+  }
+
+  _Question? _full(int g) {
+    final t = type == 0 ? 1 + _rnd.nextInt(8) : type;
+    switch (t) {
+      case 1:
+        final w = _words(g);
+        if (w.length < 6) return null;
+        final cut = (w.length / 2).ceil();
+        String tail(int x) {
+          final ww = _words(x);
+          if (ww.length < 3) return '';
+          return ww.sublist(ww.length > cut + 1 ? cut : ww.length ~/ 2).join(' ');
+        }
+        return _make('أكمل الآية', '${w.sublist(0, cut).join(' ')} …',
+            [w.sublist(cut).join(' '), for (final x in QuranData.I.similar[g] ?? const <int>[]) tail(x), for (final x in _near(g, 6)) tail(x)], g);
+      case 2:
+        final q = QuranData.I;
+        if (g >= q.surahEndG(q.ayahs[g].s)) return null;
+        return _make('ما الآية التي بعدها؟', q.ayahs[g].text,
+            [q.ayahs[g + 1].text, for (final x in _near(g + 1, 6)) q.ayahs[x].text], g + 1);
+      case 3:
+        return _previous(g);
+      case 4:
+        return _whichSurah(g);
+      case 5:
+        return _missing(g);
+      case 6:
+        return _order(g);
+      case 7:
+        return _pageStart(g);
+      default:
+        return _juzStart(g);
+    }
+  }
+
+  /// A question about an ayah the user got wrong before: its second half, or its missed word.
+  _Question? _fromMistake(int g) => _rnd.nextBool() ? (_missing(g) ?? _complete(g)) : (_complete(g) ?? _missing(g));
+
   _Question? _similar(int g) {
     final q = QuranData.I;
     final me = q.norm[g];
@@ -170,7 +300,13 @@ class _QuizScreenState extends State<QuizScreen> {
     if (pool.isNotEmpty) {
       for (var i = 0; i < 300 && n == null; i++) {
         final g = pool[_rnd.nextInt(pool.length)];
-        n = widget.kind == 0 ? _complete(g) : _similar(g);
+        n = switch (widget.kind) {
+          0 => _complete(g),
+          1 => _similar(g),
+          2 => _full(g),
+          _ => _fromMistake(g),
+        };
+        if (n != null) _askedG = g;
       }
     }
     cur = n;
@@ -187,6 +323,19 @@ class _QuizScreenState extends State<QuizScreen> {
       if (ok) right++;
     });
     UserStore.I.logQuiz(ok);
+    if (ok) {
+      HapticFeedback.lightImpact();
+      SystemSound.play(SystemSoundType.click);
+    } else {
+      HapticFeedback.heavyImpact();
+      HapticFeedback.vibrate();
+    }
+    if (widget.kind == 3) {
+      UserStore.I.mistakeAnswered(_askedG, ok);
+    } else if (!ok && cur!.g >= 0) {
+      // a wrong answer becomes one of «أسئلة أخطائي»
+      UserStore.I.addMistake(cur!.g, const []);
+    }
   }
 
   @override
@@ -196,7 +345,7 @@ class _QuizScreenState extends State<QuizScreen> {
     final q = QuranData.I;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.kind == 0 ? 'اختبار أكمل الآية' : 'اختبار المتشابهات'),
+        title: Text(const ['اختبار أكمل الآية', 'اختبار المتشابهات', 'اختبار الحفظ', 'أسئلة أخطائي'][widget.kind]),
         actions: [
           Center(
             child: Padding(
@@ -209,6 +358,34 @@ class _QuizScreenState extends State<QuizScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 30),
         children: [
+          if (widget.kind == 3)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text('بقي ${ar(UserStore.I.mistakes.length)} موضعًا أخطأت فيه. كل جواب صحيح يقرّبه من الحذف.',
+                  style: const TextStyle(color: kGoldDeep, fontWeight: FontWeight.w600)),
+            ),
+          if (widget.kind == 2)
+            SizedBox(
+              height: 44,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (var t = 0; t < kQuizTypes.length; t++)
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 8),
+                      child: ChoiceChip(
+                        label: Text(kQuizTypes[t]),
+                        selected: type == t,
+                        onSelected: (_) {
+                          type = t;
+                          _next();
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          if (widget.kind != 3)
           Row(
             children: [
               Expanded(
@@ -239,7 +416,9 @@ class _QuizScreenState extends State<QuizScreen> {
             Padding(
               padding: const EdgeInsets.all(30),
               child: Text(
-                scope == 0
+                widget.kind == 3
+                    ? 'لا أخطاء عندك الآن، بارك الله فيك. ما تخطئ فيه في التسميع أو الاختبارات يظهر هنا أسئلةً حتى تتقنه.'
+                    : scope == 0
                     ? 'لم تسجّل محفوظًا بعد. علّم السور التي حفظتها في «التسميع»، أو اختر جزءًا من الأعلى.'
                     : 'لا توجد أسئلة في هذا الموضع. اختر جزءًا آخر.',
                 textAlign: TextAlign.center,
