@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart';
@@ -110,7 +112,12 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   int _rangeWrong = 0, _redSeen = 0;
 
   // recognition inside the phone, with no internet
-  bool _offline = false; // the model is on the phone
+  bool _model = false; // the model is on the phone
+  bool get _offline => _model && AppSettings.I.tasOffline;
+  String _done = ''; // what was written down for good in this listening session
+  bool _quiet = false; // a guess made while the words are still being said
+  Timer? _tick;
+  DateTime _lastProg = DateTime.now();
   double? _dl; // download progress
 
   @override
@@ -119,7 +126,15 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     page = widget.page.clamp(1, 604);
     _build();
     OfflineAsr.I.installed().then((v) {
-      if (mounted && v) setState(() => _offline = true);
+      if (mounted && v) setState(() => _model = true);
+    });
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      final n = AppSettings.I.tasAutoHint;
+      if (n <= 0 || !on || widget.follow || !mounted || idx >= words.length) return;
+      if (DateTime.now().difference(_lastProg).inSeconds >= n) {
+        _lastProg = DateTime.now();
+        _hint();
+      }
     });
   }
 
@@ -131,7 +146,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
         if (mounted) setState(() => _dl = p);
       });
       if (mounted) {
-        setState(() => _offline = true);
+        setState(() => _model = true);
         toast(context, 'صار التسميع يعمل بلا إنترنت');
       }
     } catch (_) {
@@ -143,6 +158,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   @override
   void dispose() {
     on = false;
+    _tick?.cancel();
     _stt.cancel();
     OfflineAsr.I.close();
     super.dispose();
@@ -275,14 +291,19 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     _from = 0;
     _lastLen = 0;
     _rebase();
+    _lastProg = DateTime.now();
     if (mounted) setState(() => listening = true);
     if (_offline) {
       heard = '';
+      _done = '';
       if (OfflineAsr.I.running) return; // the microphone is already open: go on with the new page
-      final e = await OfflineAsr.I.start((t) {
+      final e = await OfflineAsr.I.start((t, fin) {
         if (!mounted || !on) return;
-        heard = '$heard $t'.trim();
+        heard = '$_done $t'.trim();
+        if (fin) _done = heard;
+        _quiet = !fin;
         _consume(normalizeAr(heard).split(' ').where((w) => w.isNotEmpty).toList());
+        _quiet = false;
       });
       if (e != null && mounted) {
         on = false;
@@ -386,7 +407,10 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
           for (var x = 0; x < k; x++) {
             final w = words[i + x];
             // he said something close to it: the engine misheard, not a mistake
-            final tried = missed.any((u) => nearWord(u, w.norm));
+            final lvl = AppSettings.I.tasStrict;
+            final tried = lvl == 2
+                ? false
+                : (missed.any((u) => nearWord(u, w.norm)) || (lvl == 0 && k == 1 && missed.isNotEmpty));
             if (st[w.key] == null || st[w.key] == 2) st[w.key] = tried ? 1 : 2;
           }
           i += k;
@@ -399,13 +423,16 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
       j++;
     }
     if (i < idx) return; // never step back
+    if (i > idx) _lastProg = DateTime.now();
     idx = i;
     state
       ..clear()
       ..addAll(st);
     final red = st.values.where((v) => v == 2).length;
-    if (red > _redSeen && !widget.follow) HapticFeedback.heavyImpact();
-    _redSeen = red;
+    if (!_quiet) {
+      if (red > _redSeen && !widget.follow && AppSettings.I.tasVibrate) HapticFeedback.heavyImpact();
+      _redSeen = red;
+    }
     setState(() {});
     if (idx >= words.length && words.isNotEmpty) _pageDone();
   }
@@ -467,13 +494,122 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
       return;
     }
     toast(context, wrong == 0 ? 'أحسنت! أتممت الصفحة بلا أخطاء' : 'أتممت الصفحة • ${ar(wrong)} كلمة تحتاج مراجعة');
+    if (AppSettings.I.tasAutoNext && on && page < 604) {
+      _go(1);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _listen();
+      });
+    }
+  }
+
+  Widget _dlRow(Color green) => _dl != null
+      ? Column(
+          children: [
+            Text('تحميل نموذج الصوت ${ar((_dl! * 100).round())}٪', style: TextStyle(fontSize: 12, color: green)),
+            const SizedBox(height: 4),
+            LinearProgressIndicator(value: _dl, minHeight: 4, color: green),
+          ],
+        )
+      : TextButton.icon(
+          onPressed: _getModel,
+          icon: Icon(Icons.download_for_offline_rounded, size: 18, color: green),
+          label: Text('حمّل نموذج الصوت للتسميع بلا إنترنت (١٦٠ ميجابايت)', style: TextStyle(color: green, fontSize: 12.5)),
+        );
+
+  Future<void> _stopAll() async {
+    on = false;
+    await _stt.stop();
+    await OfflineAsr.I.pause();
+    if (mounted) setState(() => listening = false);
+  }
+
+  void _options() {
+    final a = AppSettings.I;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) {
+          Widget head(String t) => Padding(
+                padding: const EdgeInsets.fromLTRB(18, 10, 18, 2),
+                child: Align(alignment: AlignmentDirectional.centerStart, child: Text(t, style: const TextStyle(fontWeight: FontWeight.w800, color: kGoldDeep, fontSize: 13))),
+              );
+          Widget chips(List<String> names, int sel, void Function(int) pick) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    for (var i = 0; i < names.length; i++)
+                      ChoiceChip(label: Text(names[i]), selected: sel == i, onSelected: (_) => set(() => pick(i))),
+                  ],
+                ),
+              );
+          const hints = [0, 4, 7, 10, 15];
+          return SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('خيارات التسميع', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                  head('طريقة التعرّف على الصوت'),
+                  if (!OfflineAsr.supported)
+                    const Padding(padding: EdgeInsets.symmetric(horizontal: 18), child: Text('بالإنترنت (التسميع بلا إنترنت في تطبيق الأندرويد)', style: TextStyle(fontSize: 13)))
+                  else if (!_model)
+                    const Padding(padding: EdgeInsets.symmetric(horizontal: 18), child: Text('بالإنترنت • حمّل نموذج الصوت من أسفل الصفحة ليعمل بلا إنترنت', style: TextStyle(fontSize: 13)))
+                  else
+                    chips(const ['بلا إنترنت (نموذج القرآن)', 'بالإنترنت'], a.tasOffline ? 0 : 1, (i) {
+                      _stopAll();
+                      a.tasOffline = i == 0;
+                      setState(() {});
+                    }),
+                  head('دقة الحساب'),
+                  chips(const ['متسامح', 'متوسط', 'دقيق'], a.tasStrict, (i) => a.tasStrict = i),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 2, 18, 0),
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(const ['يتجاوز عن الكلمة إذا نطقت شيئًا مكانها', 'يتجاوز عن الكلمة إذا نطقت قريبًا منها', 'كل كلمة لم تُسمع كما هي تُحسب خطأ'][a.tasStrict],
+                          style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    ),
+                  ),
+                  head('التذكير التلقائي عند التوقف'),
+                  chips([for (final h in hints) h == 0 ? 'بدون' : '${ar(h)} ثوانٍ'], hints.indexOf(a.tasAutoHint).clamp(0, hints.length - 1), (i) => a.tasAutoHint = hints[i]),
+                  const SizedBox(height: 6),
+                  SwitchListTile(dense: true, title: const Text('الاهتزاز عند الخطأ'), value: a.tasVibrate, onChanged: (v) => set(() => a.tasVibrate = v)),
+                  SwitchListTile(dense: true, title: const Text('الانتقال للصفحة التالية تلقائيًا'), value: a.tasAutoNext, onChanged: (v) => set(() => a.tasAutoNext = v)),
+                  SwitchListTile(dense: true, title: const Text('إظهار ما يسمعه التطبيق'), value: a.tasShowHeard, onChanged: (v) {
+                    set(() => a.tasShowHeard = v);
+                    setState(() {});
+                  }),
+                  SwitchListTile(dense: true, title: const Text('إبقاء الشاشة مضاءة'), value: a.keepAwake, onChanged: (v) => set(() => a.keepAwake = v)),
+                  if (_model)
+                    ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.delete_outline_rounded),
+                      title: const Text('حذف نموذج الصوت من الجوال (١٦٠ ميجابايت)'),
+                      onTap: () async {
+                        Navigator.pop(c);
+                        await _stopAll();
+                        await OfflineAsr.I.remove();
+                        if (mounted) setState(() => _model = false);
+                      },
+                    ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _go(int d) {
     final n = page + d;
     if (n < 1 || n > 604) return;
     _stt.cancel();
-    final auto = _offline && on && (widget.follow || widget.toG != null);
+    final auto = _offline && on && (widget.follow || widget.toG != null || AppSettings.I.tasAutoNext);
     if (_offline && !auto) OfflineAsr.I.pause();
     on = auto;
     setState(() {
@@ -505,6 +641,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
           ],
         ),
         actions: [
+          IconButton(tooltip: 'خيارات التسميع', icon: const Icon(Icons.tune_rounded), onPressed: _options),
           IconButton(
             tooltip: 'إظهار الصفحة',
             icon: Icon(peekAll ? Icons.visibility_off_outlined : Icons.visibility_outlined),
@@ -529,7 +666,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Text(err!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red, fontSize: 13)),
             ),
-          if (heard.isNotEmpty && on)
+          if (heard.isNotEmpty && on && AppSettings.I.tasShowHeard)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(heard, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
@@ -588,33 +725,22 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
               color: col.soft,
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
-              child: _offline
-                  ? ValueListenableBuilder<bool>(
+              child: !_model
+                  ? _dlRow(green)
+                  : !_offline
+                  ? Text('التسميع بالإنترنت', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: green, fontWeight: FontWeight.w600))
+                  : ValueListenableBuilder<bool>(
                       valueListenable: OfflineAsr.I.busy,
                       builder: (_, b, __) => Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.offline_bolt_rounded, size: 16, color: green),
                           const SizedBox(width: 6),
-                          Text(b ? 'يكتب ما قرأت…' : 'التسميع بلا إنترنت • يظهر ما قرأته بعد كل وقفة',
+                          Text(b ? 'يكتب ما قرأت…' : 'التسميع بلا إنترنت • تظهر الكلمات وأنت تقرأ',
                               style: TextStyle(fontSize: 12, color: green, fontWeight: FontWeight.w600)),
                         ],
                       ),
-                    )
-                  : _dl != null
-                      ? Column(
-                          children: [
-                            Text('تحميل نموذج الصوت ${ar((_dl! * 100).round())}٪', style: TextStyle(fontSize: 12, color: green)),
-                            const SizedBox(height: 4),
-                            LinearProgressIndicator(value: _dl, minHeight: 4, color: green),
-                          ],
-                        )
-                      : TextButton.icon(
-                          onPressed: _getModel,
-                          icon: Icon(Icons.download_for_offline_rounded, size: 18, color: green),
-                          label: Text('حمّل نموذج الصوت للتسميع بلا إنترنت (١٦٠ ميجابايت)',
-                              style: TextStyle(color: green, fontSize: 12.5)),
-                        ),
+                    ),
             ),
           Container(
             color: col.soft,

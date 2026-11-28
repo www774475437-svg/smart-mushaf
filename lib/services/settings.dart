@@ -23,6 +23,27 @@ class AppSettings extends ChangeNotifier {
   ReadTheme get theme => ReadTheme.values[(_p.getInt('theme') ?? 0).clamp(0, 2)];
   set theme(ReadTheme v) => _set('theme', v.index);
 
+  // ---- tasmee ----
+  bool get tasOffline => _p.getBool('tasOffline') ?? true;
+  set tasOffline(bool v) => _set('tasOffline', v);
+
+  bool get tasVibrate => _p.getBool('tasVibrate') ?? true;
+  set tasVibrate(bool v) => _set('tasVibrate', v);
+
+  bool get tasShowHeard => _p.getBool('tasShowHeard') ?? true;
+  set tasShowHeard(bool v) => _set('tasShowHeard', v);
+
+  /// 0 forgiving, 1 normal, 2 exact
+  int get tasStrict => (_p.getInt('tasStrict') ?? 1).clamp(0, 2);
+  set tasStrict(int v) => _set('tasStrict', v);
+
+  /// seconds of silence before the next word is shown by itself; 0 = never
+  int get tasAutoHint => _p.getInt('tasAutoHint') ?? 0;
+  set tasAutoHint(int v) => _set('tasAutoHint', v);
+
+  bool get tasAutoNext => _p.getBool('tasAutoNext') ?? false;
+  set tasAutoNext(bool v) => _set('tasAutoNext', v);
+
   bool get scrollMode => _p.getBool('scrollMode') ?? false;
   set scrollMode(bool v) => _set('scrollMode', v);
 

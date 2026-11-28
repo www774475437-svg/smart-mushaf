@@ -14,7 +14,8 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as so;
 /// The model is Whisper «base» trained on Quran recitation by Tarteel
 /// (tarteel-ai/whisper-base-ar-quran, Apache-2.0), run by sherpa-onnx. It is downloaded once
 /// (about 160 MB) from the app's store and kept on the phone. The microphone is cut into
-/// stretches of speech; each stretch is written down a moment after the reciter pauses.
+/// stretches of speech; while a stretch is still being said it is written down again and again
+/// (about once a second), so the words appear while the reciter is reading.
 class OfflineAsr {
   OfflineAsr._();
   static final OfflineAsr I = OfflineAsr._();
@@ -100,7 +101,7 @@ class OfflineAsr {
   ReceivePort? _from;
   final AudioRecorder _rec = AudioRecorder();
   StreamSubscription<Uint8List>? _mic;
-  void Function(String)? _onText;
+  void Function(String text, bool isFinal)? _onText;
   bool running = false;
 
   /// True while a stretch of speech is being written down.
@@ -108,7 +109,7 @@ class OfflineAsr {
 
   /// Loads the model (once) and opens the microphone. Each recognised stretch goes to [onText].
   /// Returns a message when it cannot start, null when it started.
-  Future<String?> start(void Function(String) onText) async {
+  Future<String?> start(void Function(String text, bool isFinal) onText) async {
     if (!supported) return 'التسميع بلا إنترنت يعمل في تطبيق الأندرويد فقط.';
     if (!await installed()) return 'حمّل نموذج الصوت أولًا.';
     if (!await _rec.hasPermission()) return 'اسمح للتطبيق باستخدام الميكروفون.';
@@ -126,8 +127,9 @@ class OfflineAsr {
           if (!ready.isCompleted) ready.complete('تعذّر تشغيل نموذج الصوت على هذا الجهاز.');
         } else if (m is List && m[0] == 'busy') {
           busy.value = m[1] as bool;
-        } else if (m is String) {
-          if (running && m.trim().isNotEmpty) _onText?.call(m.trim());
+        } else if (m is List && (m[0] == 'p' || m[0] == 'f')) {
+          final t = (m[1] as String).trim();
+          if (running && (t.isNotEmpty || m[0] == 'f')) _onText?.call(t, m[0] == 'f');
         }
       });
       try {
@@ -204,7 +206,7 @@ void _worker(List<dynamic> args) {
     vad = so.VoiceActivityDetector(
       config: so.VadModelConfig(
         sileroVad: so.SileroVadModelConfig(
-            model: '$dir/silero_vad.onnx', minSilenceDuration: 0.4, minSpeechDuration: 0.3, maxSpeechDuration: 10.0),
+            model: '$dir/silero_vad.onnx', minSilenceDuration: 0.35, minSpeechDuration: 0.25, maxSpeechDuration: 8.0),
         numThreads: 1,
         debug: false,
       ),
@@ -217,22 +219,59 @@ void _worker(List<dynamic> args) {
   const win = 512;
   var pending = Float32List(0);
 
+  // the stretch being said now, kept so it can be written down before it ends
+  final cur = <Float32List>[];
+  var curLen = 0, lastPartial = 0, step = 9600; // samples
+  final pre = <Float32List>[]; // a little sound from before speech was noticed
+
+  String write(Float32List samples) {
+    final st = rec.createStream();
+    st.acceptWaveform(samples: samples, sampleRate: 16000);
+    rec.decode(st);
+    final text = rec.getResult(st).text;
+    st.free();
+    return text;
+  }
+
+  void clearCur() {
+    cur.clear();
+    curLen = 0;
+    lastPartial = 0;
+  }
+
   void drain() {
     while (!vad.isEmpty()) {
       final seg = vad.front();
       vad.pop();
-      if (seg.samples.length < 4000) continue;
+      clearCur();
+      if (seg.samples.length < 4000) {
+        out.send(['f', '']);
+        continue;
+      }
       out.send(['busy', true]);
       try {
-        final st = rec.createStream();
-        st.acceptWaveform(samples: seg.samples, sampleRate: 16000);
-        rec.decode(st);
-        final text = rec.getResult(st).text;
-        st.free();
-        out.send(text);
+        out.send(['f', write(seg.samples)]);
       } catch (_) {}
       out.send(['busy', false]);
     }
+  }
+
+  void partial() {
+    if (curLen < 11200 || curLen - lastPartial < step) return;
+    lastPartial = curLen;
+    final all = Float32List(curLen);
+    var o = 0;
+    for (final c in cur) {
+      all.setAll(o, c);
+      o += c.length;
+    }
+    final t0 = DateTime.now();
+    try {
+      out.send(['p', write(all)]);
+    } catch (_) {}
+    // a slow phone writes less often, so it never falls behind the reciter
+    final ms = DateTime.now().difference(t0).inMilliseconds;
+    step = (ms * 16 * 1.4).round().clamp(9600, 48000);
   }
 
   final port = ReceivePort();
@@ -243,17 +282,35 @@ void _worker(List<dynamic> args) {
         ..setAll(pending.length, m);
       var i = 0;
       while (i + win <= all.length) {
-        vad.acceptWaveform(Float32List.sublistView(all, i, i + win));
+        final w = Float32List.fromList(all.sublist(i, i + win));
+        vad.acceptWaveform(w);
+        if (vad.isDetected()) {
+          if (cur.isEmpty) {
+            for (final x in pre) {
+              cur.add(x);
+              curLen += x.length;
+            }
+            pre.clear();
+          }
+          cur.add(w);
+          curLen += win;
+        } else {
+          pre.add(w);
+          if (pre.length > 10) pre.removeAt(0);
+        }
         i += win;
       }
       pending = Float32List.fromList(all.sublist(i));
       drain();
+      partial();
     } else if (m == 'reset') {
       try {
         vad.flush();
         drain();
       } catch (_) {}
       pending = Float32List(0);
+      clearCur();
+      pre.clear();
     } else if (m == 'stop') {
       try {
         vad.free();
