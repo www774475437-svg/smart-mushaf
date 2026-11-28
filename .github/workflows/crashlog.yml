@@ -1,0 +1,51 @@
+name: Try the APK
+
+# Installs the latest released APK on an Android emulator, opens it, and prints any crash.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: release tag (empty = latest)
+        required: false
+  push:
+    paths:
+      - .github/workflows/crashlog.yml
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Get the APK
+        run: |
+          gh release download ${{ inputs.tag }} -R ${{ github.repository }} -p '*.apk' -O app.apk
+          ls -la app.apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          disk-size: 4096M
+          script: |
+            adb install app.apk
+            adb logcat -c
+            adb shell monkey -p com.abualathari.smart_mushaf -c android.intent.category.LAUNCHER 1
+            sleep 40
+            adb exec-out screencap -p > shot.png || true
+            adb logcat -d > log.txt
+            grep -n -A40 "FATAL EXCEPTION\|Fatal signal\|AndroidRuntime: \|E/flutter" log.txt | head -200 || true
+            echo "---- alive?"; adb shell pidof com.abualathari.smart_mushaf || echo "NOT RUNNING"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: try
+          path: |
+            shot.png
+            log.txt
