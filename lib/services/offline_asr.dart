@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -237,7 +238,6 @@ void _worker(List<dynamic> args) {
   // the fast model writes what is being said three times a second
   final minStep = ctc ? 4800 : 9600, minLen = ctc ? 6400 : 11200;
   late so.OfflineRecognizer rec;
-  late so.VoiceActivityDetector vad;
   try {
     so.initBindings();
     rec = so.OfflineRecognizer(so.OfflineRecognizerConfig(
@@ -257,26 +257,14 @@ void _worker(List<dynamic> args) {
               debug: false,
             ),
     ));
-    vad = so.VoiceActivityDetector(
-      config: so.VadModelConfig(
-        sileroVad: so.SileroVadModelConfig(
-            model: '$dir/silero_vad.onnx', minSilenceDuration: 0.35, minSpeechDuration: 0.25, maxSpeechDuration: 8.0),
-        numThreads: 1,
-        debug: false,
-      ),
-      bufferSizeInSeconds: 60,
-    );
   } catch (e) {
     out.send(['error', '$e']);
     return;
   }
   const win = 512;
   var pending = Float32List(0);
-
-  // the stretch being said now, kept so it can be written down before it ends
-  final cur = <Float32List>[];
-  var curLen = 0, lastPartial = 0, step = minStep; // samples
-  final pre = <Float32List>[]; // a little sound from before speech was noticed
+  final gate = _Gate();
+  var lastPartial = 0, step = minStep; // samples
 
   String write(Float32List samples) {
     final st = rec.createStream();
@@ -287,41 +275,27 @@ void _worker(List<dynamic> args) {
     return text;
   }
 
-  void clearCur() {
-    cur.clear();
-    curLen = 0;
+  void finish(Float32List seg) {
     lastPartial = 0;
-  }
-
-  void drain() {
-    while (!vad.isEmpty()) {
-      final seg = vad.front();
-      vad.pop();
-      clearCur();
-      if (seg.samples.length < 4000) {
-        out.send(['f', '']);
-        continue;
-      }
-      out.send(['busy', true]);
-      try {
-        out.send(['f', write(seg.samples)]);
-      } catch (_) {}
-      out.send(['busy', false]);
+    if (seg.length < 4000) {
+      out.send(['f', '']);
+      return;
     }
+    out.send(['busy', true]);
+    try {
+      out.send(['f', write(seg)]);
+    } catch (_) {}
+    out.send(['busy', false]);
   }
 
+  // the stretch being said now is written down before it ends
   void partial() {
-    if (curLen < minLen || curLen - lastPartial < step) return;
-    lastPartial = curLen;
-    final all = Float32List(curLen);
-    var o = 0;
-    for (final c in cur) {
-      all.setAll(o, c);
-      o += c.length;
-    }
+    final n = gate.cur.length * win;
+    if (!gate.on || n < minLen || n - lastPartial < step) return;
+    lastPartial = n;
     final t0 = DateTime.now();
     try {
-      out.send(['p', write(all)]);
+      out.send(['p', write(gate.samples())]);
     } catch (_) {}
     // a slow phone writes less often, so it never falls behind the reciter
     final ms = DateTime.now().difference(t0).inMilliseconds;
@@ -336,42 +310,119 @@ void _worker(List<dynamic> args) {
         ..setAll(pending.length, m);
       var i = 0;
       while (i + win <= all.length) {
-        final w = Float32List.fromList(all.sublist(i, i + win));
-        vad.acceptWaveform(w);
-        if (vad.isDetected()) {
-          if (cur.isEmpty) {
-            for (final x in pre) {
-              cur.add(x);
-              curLen += x.length;
-            }
-            pre.clear();
-          }
-          cur.add(w);
-          curLen += win;
-        } else {
-          pre.add(w);
-          if (pre.length > 10) pre.removeAt(0);
+        for (final seg in gate.feed(Float32List.fromList(all.sublist(i, i + win)))) {
+          finish(seg);
         }
         i += win;
       }
       pending = Float32List.fromList(all.sublist(i));
-      drain();
       partial();
     } else if (m == 'reset') {
-      try {
-        vad.flush();
-        drain();
-      } catch (_) {}
+      for (final seg in gate.flush()) {
+        finish(seg);
+      }
       pending = Float32List(0);
-      clearCur();
-      pre.clear();
     } else if (m == 'stop') {
       try {
-        vad.free();
         rec.free();
       } catch (_) {}
       port.close();
     }
   });
   out.send(port.sendPort);
+}
+
+/// Finds the stretches of recitation in the microphone's sound by loudness. The usual voice
+/// detector (Silero) was made for talking: on long melodic recitation it went deaf for minutes
+/// (measured on whole pages by 16 reciters). The same rules are in tool/gate.py, which the
+/// measurements run on.
+class _Gate {
+  static const start = 2, stop = 11, preN = 8, maxF = 280, look = 78;
+  static const ratio = 2.0, low = 0.0015, under = 0.05;
+  double? floor;
+  double peak = 0;
+  bool on = false;
+  int run = 0, quiet = 0;
+  List<Float32List> pre = [], cur = [];
+  List<double> lv = [];
+
+  Float32List _join(List<Float32List> parts) {
+    final all = Float32List(parts.fold<int>(0, (a, b) => a + b.length));
+    var o = 0;
+    for (final c in parts) {
+      all.setAll(o, c);
+      o += c.length;
+    }
+    return all;
+  }
+
+  Float32List samples() => _join(cur);
+
+  /// Takes one frame of 512 samples; returns the stretches that ended with it (usually none).
+  List<Float32List> feed(Float32List w) {
+    var sum = 0.0;
+    for (final x in w) {
+      sum += x * x;
+    }
+    final e = sqrt(sum / w.length);
+    final f = floor;
+    if (f == null) {
+      floor = e;
+    } else if (e < f) {
+      floor = f * 0.9 + e * 0.1;
+    } else {
+      floor = f * 1.0005;
+    }
+    peak = max(e, peak * 0.9995);
+    final loud = e > max(max(floor! * ratio, low), peak * under);
+    final out = <Float32List>[];
+    if (!on) {
+      pre.add(w);
+      if (pre.length > preN) pre.removeAt(0);
+      run = loud ? run + 1 : 0;
+      if (run >= start) {
+        on = true;
+        quiet = 0;
+        cur = List.of(pre);
+        lv = List.filled(pre.length, 0.0, growable: true);
+        pre = [];
+        run = 0;
+      }
+      return out;
+    }
+    cur.add(w);
+    lv.add(e);
+    quiet = loud ? 0 : quiet + 1;
+    if (quiet >= stop) {
+      out.add(_join(cur));
+      on = false;
+      cur = [];
+      lv = [];
+    } else if (cur.length >= maxF) {
+      // a long stretch is cut at the quietest moment of its last 2.5 seconds
+      final n = cur.length;
+      var k = n - look;
+      var best = double.infinity;
+      for (var i = n - look; i < n - 3; i++) {
+        final v = lv[i] + lv[i + 1] + lv[i + 2];
+        if (v < best) {
+          best = v;
+          k = i;
+        }
+      }
+      k++;
+      out.add(_join(cur.sublist(0, k)));
+      cur = cur.sublist(k);
+      lv = lv.sublist(k);
+    }
+    return out;
+  }
+
+  List<Float32List> flush() {
+    final out = on && cur.isNotEmpty ? [_join(cur)] : <Float32List>[];
+    on = false;
+    cur = [];
+    lv = [];
+    return out;
+  }
 }

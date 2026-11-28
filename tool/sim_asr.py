@@ -1,11 +1,14 @@
 """Runs the app's offline listening pipeline on real recitations, away from the phone.
 
-Mirrors lib/services/offline_asr.dart (same voice-activity settings, the same rule for writing
+Mirrors lib/services/offline_asr.dart (the same loudness gate, the same rule for writing
 down a stretch while it is still being said) and writes every text the app would receive, with
 the moment it would arrive, so tool/eval_matcher.dart can replay it through the app's matcher.
 """
 import gzip, io, json, os, sys, time, urllib.request
 import numpy as np, librosa, sherpa_onnx
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from gate import Gate
 
 MODEL, OUT = sys.argv[1], sys.argv[2]
 SLOW = float(os.environ.get('SLOW', '3'))  # the phone is about this much slower than the build machine
@@ -25,16 +28,6 @@ else:
         encoder=f'{MODEL}/encoder.int8.onnx', decoder=f'{MODEL}/decoder.int8.onnx', tokens=f'{MODEL}/tokens.txt',
         language='ar', task='transcribe', num_threads=4)
 MIN_STEP = 4800 if CTC else 9600  # the fast model writes what is being said three times a second
-
-
-def new_vad():
-    c = sherpa_onnx.VadModelConfig()
-    c.silero_vad.model = 'vad/silero_vad.onnx'
-    c.silero_vad.min_silence_duration = float(os.environ.get('MIN_SIL', '0.35'))
-    c.silero_vad.min_speech_duration = 0.25
-    c.silero_vad.max_speech_duration = float(os.environ.get('MAX_SPEECH', '8'))
-    c.sample_rate = 16000
-    return sherpa_onnx.VoiceActivityDetector(c, buffer_size_in_seconds=60)
 
 
 def write(samples):
@@ -67,49 +60,36 @@ def fetch(folder, s, a):
 
 
 def simulate(audio):
-    vad = new_vad()
-    ev, cur, pre = [], [], []
-    cur_len = last_partial = 0
+    gate = Gate()
+    ev = []
+    last_partial = 0
     step = MIN_STEP
     clock = 0.0
     WIN = 512
 
-    def drain():
-        nonlocal cur, cur_len, last_partial, clock
-        while not vad.empty():
-            seg = np.array(vad.front.samples, dtype=np.float32)
-            vad.pop()
-            cur, cur_len, last_partial = [], 0, 0
-            if len(seg) < 4000:
-                ev.append([round(clock, 2), 'f', ''])
-                continue
-            t, d = write(seg)
-            clock += d
-            ev.append([round(clock, 2), 'f', t])
+    def final(seg):
+        nonlocal last_partial, clock
+        last_partial = 0
+        if len(seg) < 4000:
+            ev.append([round(clock, 2), 'f', ''])
+            return
+        t, d = write(seg)
+        clock += d
+        ev.append([round(clock, 2), 'f', t])
 
     for i in range(0, len(audio) - WIN + 1, WIN):
-        w = audio[i:i + WIN]
         clock = max(clock, (i + WIN) / 16000)
-        vad.accept_waveform(w)
-        if vad.is_speech_detected():
-            if not cur:
-                cur = list(pre)
-                cur_len = sum(len(x) for x in cur)
-                pre = []
-            cur.append(w)
-            cur_len += WIN
-        else:
-            pre.append(w)
-            pre = pre[-10:]
-        drain()
-        if cur_len >= (6400 if CTC else 11200) and cur_len - last_partial >= step:
-            last_partial = cur_len
-            t, d = write(np.concatenate(cur))
+        for seg in gate.feed(audio[i:i + WIN]):
+            final(seg)
+        n = len(gate.cur) * WIN
+        if gate.speaking() and n >= (6400 if CTC else 11200) and n - last_partial >= step:
+            last_partial = n
+            t, d = write(gate.samples())
             clock += d
             ev.append([round(clock, 2), 'p', t])
             step = int(min(48000, max(MIN_STEP, d * 1000 * 16 * 1.4)))
-    vad.flush()
-    drain()
+    for seg in gate.flush():
+        final(seg)
     return ev
 
 
