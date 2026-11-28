@@ -17,9 +17,14 @@ lay = json.loads(gzip.open('assets/data/layout2.json.gz').read())['p']
 q = json.load(open('assets/data/quran.json', encoding='utf-8'))
 rows, clean = q['a'], q['c']
 
-rec = sherpa_onnx.OfflineRecognizer.from_whisper(
-    encoder=f'{MODEL}/encoder.int8.onnx', decoder=f'{MODEL}/decoder.int8.onnx', tokens=f'{MODEL}/tokens.txt',
-    language='ar', task='transcribe', num_threads=4)
+CTC = os.path.exists(f'{MODEL}/model.int8.onnx')
+if CTC:
+    rec = sherpa_onnx.OfflineRecognizer.from_zipformer_ctc(model=f'{MODEL}/model.int8.onnx', tokens=f'{MODEL}/tokens.txt', num_threads=2)
+else:
+    rec = sherpa_onnx.OfflineRecognizer.from_whisper(
+        encoder=f'{MODEL}/encoder.int8.onnx', decoder=f'{MODEL}/decoder.int8.onnx', tokens=f'{MODEL}/tokens.txt',
+        language='ar', task='transcribe', num_threads=4)
+MIN_STEP = 4800 if CTC else 9600  # the fast model writes what is being said three times a second
 
 
 def new_vad():
@@ -65,7 +70,7 @@ def simulate(audio):
     vad = new_vad()
     ev, cur, pre = [], [], []
     cur_len = last_partial = 0
-    step = 9600
+    step = MIN_STEP
     clock = 0.0
     WIN = 512
 
@@ -97,12 +102,12 @@ def simulate(audio):
             pre.append(w)
             pre = pre[-10:]
         drain()
-        if cur_len >= 11200 and cur_len - last_partial >= step:
+        if cur_len >= (6400 if CTC else 11200) and cur_len - last_partial >= step:
             last_partial = cur_len
             t, d = write(np.concatenate(cur))
             clock += d
             ev.append([round(clock, 2), 'p', t])
-            step = int(min(48000, max(9600, d * 1000 * 16 * 1.4)))
+            step = int(min(48000, max(MIN_STEP, d * 1000 * 16 * 1.4)))
     vad.flush()
     drain()
     return ev

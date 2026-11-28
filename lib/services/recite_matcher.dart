@@ -127,9 +127,12 @@ bool tashkeelDiffers(String heard, String mushaf, {bool skipLast = false}) {
 class MWord {
   final String key; // line:index on the page
   final int g;
-  final String norm;
-  final String text;
-  const MWord(this.key, this.g, this.norm, this.text);
+  final String norm; // everyday spelling
+  final String text; // as written in the mushaf, with its marks
+  MWord(this.key, this.g, this.norm, this.text);
+
+  /// The mushaf's own spelling without marks (السموت): some models write the words this way.
+  late final String alt = normAr(text);
 }
 
 class MatchOut {
@@ -158,14 +161,15 @@ MatchOut matchRecitation({
   var i = baseIdx;
   final st = Map<String, int>.of(baseState);
   final missed = <String>[]; // heard words that matched nothing since the last match
-  bool m(int hj, int wi) => hj < hs.length && wi < words.length && sameWord(hs[hj], words[wi].norm);
+  bool eq(String h, int wi) => sameWord(h, words[wi].norm) || sameWord(h, words[wi].alt);
+  bool m(int hj, int wi) => hj < hs.length && wi < words.length && eq(hs[hj], wi);
   void ok(int wi) => st[words[wi].key] ??= 1;
   final tk = tashkeel && raw != null && raw.length == hs.length;
   var j = from;
   while (j < hs.length && i < words.length) {
     final h = hs[j];
     final e = words[i].norm;
-    if (sameWord(h, e)) {
+    if (eq(h, i)) {
       // the words still being said may yet change: their vowels are judged once they settle
       if (tk && h == normAr(raw[j]) && (!quiet || j < hs.length - 2) && st[words[i].key] == null &&
           tashkeelDiffers(raw[j], words[i].text, skipLast: i + 1 >= words.length || words[i + 1].g != words[i].g)) {
@@ -193,7 +197,7 @@ MatchOut matchRecitation({
       continue;
     }
     // one word of the mushaf heard as two
-    if (j + 1 < hs.length && sameWord(h + hs[j + 1], e)) {
+    if (j + 1 < hs.length && eq(h + hs[j + 1], i)) {
       ok(i);
       i++;
       j += 2;
@@ -201,7 +205,7 @@ MatchOut matchRecitation({
       continue;
     }
     // two words of the mushaf heard as one
-    if (i + 1 < words.length && sameWord(h, e + words[i + 1].norm)) {
+    if (i + 1 < words.length && (sameWord(h, e + words[i + 1].norm) || sameWord(h, words[i].alt + words[i + 1].alt))) {
       ok(i);
       ok(i + 1);
       i += 2;
@@ -231,7 +235,7 @@ MatchOut matchRecitation({
           final lvl = strict;
           final tried = lvl == 2
               ? false
-              : (missed.any((u) => nearWord(u, w.norm)) || (lvl == 0 && k == 1 && missed.isNotEmpty));
+              : (missed.any((u) => nearWord(u, w.norm) || nearWord(u, w.alt)) || (lvl == 0 && k == 1 && missed.isNotEmpty));
           if (st[w.key] == null || st[w.key] == 2) st[w.key] = tried ? 1 : 2;
         }
         i += k;

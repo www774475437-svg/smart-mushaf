@@ -42,8 +42,17 @@ jobs:
           pip install -q sherpa-onnx librosa numpy soundfile
           gh release download asr-quran-base -R www774475437-svg/smart-mushaf-store -D base -p '*.onnx' -p tokens.txt
           gh release download asr-quran-tiny -R www774475437-svg/smart-mushaf-store -D tiny -p '*.onnx' -p tokens.txt
+          gh release download asr-quran-ctc -R www774475437-svg/smart-mushaf-store -D ctc -p '*.onnx' -p tokens.txt
           mkdir vad && cp base/silero_vad.onnx vad/
-      - name: Listen
+      - name: Listen (fast model, many reciters)
+        env:
+          PAGES: '2,50,293,446,582,604'
+          RECITERS: 'Husary_64kbps,Alafasy_64kbps,Minshawy_Murattal_128kbps,Abu_Bakr_Ash-Shaatree_128kbps,Hudhaify_128kbps,Abdurrahmaan_As-Sudais_192kbps,Ghamadi_40kbps,MaherAlMuaiqly128kbps,Hani_Rifai_192kbps,Mohammad_al_Tablaway_128kbps,Ayman_Sowaid_64kbps,Nasser_Alqatami_128kbps,Yasser_Ad-Dussary_128kbps,Abdullah_Basfar_192kbps,Abdul_Basit_Murattal_64kbps,Husary_Muallim_128kbps'
+        run: python tool/sim_asr.py ctc ctc.json
+      - name: Listen (Whisper models, a small sample)
+        env:
+          PAGES: '446,582'
+          RECITERS: 'Husary_64kbps,Abu_Bakr_Ash-Shaatree_128kbps'
         run: |
           python tool/sim_asr.py tiny tiny.json
           python tool/sim_asr.py base base.json
@@ -52,4 +61,4 @@ jobs:
           mkdir -p ev/tool ev/lib/services
           cp tool/eval_matcher.dart ev/tool/ && cp lib/services/recite_matcher.dart ev/lib/services/
           cd ev
-          for m in tiny base; do dart tool/eval_matcher.dart ../$m.json 1; done
+          for m in ctc tiny base; do dart tool/eval_matcher.dart ../$m.json 1; done
