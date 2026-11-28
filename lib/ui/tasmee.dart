@@ -499,7 +499,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
                   const Text('خيارات التسميع', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
                   head('طريقة التعرّف على الصوت'),
                   if (!OfflineAsr.supported)
-                    const Padding(padding: EdgeInsets.symmetric(horizontal: 18), child: Text('بالإنترنت (التسميع بلا إنترنت في تطبيق الأندرويد)', style: TextStyle(fontSize: 13)))
+                    const Padding(padding: EdgeInsets.symmetric(horizontal: 18), child: Text('بالإنترنت (التسميع بلا إنترنت في التطبيق، لا في الموقع)', style: TextStyle(fontSize: 13)))
                   else if (!_model)
                     const Padding(padding: EdgeInsets.symmetric(horizontal: 18), child: Text('بالإنترنت • اختر نموذجًا من الأسفل ليعمل بلا إنترنت', style: TextStyle(fontSize: 13)))
                   else

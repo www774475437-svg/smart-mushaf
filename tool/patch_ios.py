@@ -14,6 +14,8 @@ d['UIBackgroundModes'] = ['audio']
 d['NSMicrophoneUsageDescription'] = 'يُستخدم الميكروفون لتسميع حفظك من القرآن وتصحيح الأخطاء.'
 d['NSSpeechRecognitionUsageDescription'] = 'يُستخدم التعرّف على الصوت لمتابعة تلاوتك أثناء التسميع.'
 d['NSLocationWhenInUseUsageDescription'] = 'يُستخدم موقعك لحساب أوقات الصلاة واتجاه القبلة.'
+d['NSLocationAlwaysAndWhenInUseUsageDescription'] = 'يُستخدم موقعك لحساب أوقات الصلاة واتجاه القبلة.'
+d['NSLocationAlwaysUsageDescription'] = 'يُستخدم موقعك لحساب أوقات الصلاة واتجاه القبلة.'
 p.write_bytes(plistlib.dumps(d))
 
 # deployment target (the speech and recognition plugins need a recent iOS)

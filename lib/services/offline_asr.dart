@@ -41,7 +41,7 @@ class OfflineAsr {
   };
   static const Map<String, int> totalBytes = {'base': 161200000, 'tiny': 104300000};
 
-  static bool get supported => !kIsWeb && Platform.isAndroid;
+  static bool get supported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   /// The model the next listening session uses.
   String kind = 'base';
@@ -132,7 +132,7 @@ class OfflineAsr {
   /// Loads the model (once) and opens the microphone. Each recognised stretch goes to [onText].
   /// Returns a message when it cannot start, null when it started.
   Future<String?> start(void Function(String text, bool isFinal) onText) async {
-    if (!supported) return 'التسميع بلا إنترنت يعمل في تطبيق الأندرويد فقط.';
+    if (!supported) return 'التسميع بلا إنترنت يعمل في التطبيق، لا في الموقع.';
     if (!await installed(kind)) return 'حمّل نموذج الصوت أولًا.';
     if (!await _rec.hasPermission()) return 'اسمح للتطبيق باستخدام الميكروفون.';
     _onText = onText;
