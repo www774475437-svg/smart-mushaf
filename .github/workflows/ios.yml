@@ -1,0 +1,78 @@
+name: Build iOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ios.yml
+      - tool/patch_ios.py
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Cache Quran data and fonts
+        uses: actions/cache@v4
+        with:
+          path: |
+            assets/data
+            assets/fonts
+            assets/qcf
+          key: quran-data-${{ hashFiles('tool/build_data.py') }}
+
+      - name: Download Quran data and fonts
+        run: python3 tool/build_data.py
+
+      - name: Create iOS project
+        run: |
+          flutter create --org com.abualathari --project-name smart_mushaf --platforms ios .
+          python3 -m pip install pillow --break-system-packages -q || python3 -m pip install pillow -q
+          python3 tool/patch_ios.py
+
+      - run: flutter pub get
+
+      - name: Build (unsigned archive)
+        run: flutter build ipa --release --no-codesign --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }}
+
+      - name: Sign and upload to App Store Connect
+        run: |
+          if [ -z "$ASC_KEY_P8" ] || [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "::warning::Apple keys are not set in the repository secrets; build checked only, nothing uploaded."
+            exit 0
+          fi
+          mkdir -p ~/.appstoreconnect/private_keys
+          KEY=~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          cat > eo.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>method</key><string>app-store-connect</string>
+          <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+          <key>signingStyle</key><string>automatic</string>
+          <key>uploadSymbols</key><true/>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath build/ios/archive/Runner.xcarchive \
+            -exportOptionsPlist eo.plist -exportPath build/ipa -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          ls -la build/ipa
+          xcrun altool --upload-app -f build/ipa/*.ipa -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
