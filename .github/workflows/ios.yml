@@ -21,6 +21,7 @@ jobs:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -54,25 +55,50 @@ jobs:
 
       - name: Sign and upload to App Store Connect
         run: |
-          if [ -z "$ASC_KEY_P8" ] || [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$APPLE_TEAM_ID" ]; then
-            echo "::warning::Apple keys are not set in the repository secrets; build checked only, nothing uploaded."
+          if [ -z "$ASC_KEY_P8" ] || [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$APPLE_TEAM_ID" ] || [ -z "$KEY_PASSWORD" ] || [ ! -f signing/ios_dist.key.enc ] || [ ! -f signing/ios_dist.cer ]; then
+            echo "::warning::Signing is not complete yet; build checked only, nothing uploaded."
             exit 0
           fi
           mkdir -p ~/.appstoreconnect/private_keys
           KEY=~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
           printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          # certificate + its private key (decrypted with KEY_PASSWORD) into a temporary keychain
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in signing/ios_dist.key.enc -out "$RUNNER_TEMP/dist.key" -pass env:KEY_PASSWORD
+          openssl x509 -inform DER -in signing/ios_dist.cer -out "$RUNNER_TEMP/dist.pem"
+          openssl pkcs12 -export -legacy -inkey "$RUNNER_TEMP/dist.key" -in "$RUNNER_TEMP/dist.pem" -out "$RUNNER_TEMP/dist.p12" -passout pass:ci || \
+            openssl pkcs12 -export -inkey "$RUNNER_TEMP/dist.key" -in "$RUNNER_TEMP/dist.pem" -out "$RUNNER_TEMP/dist.p12" -passout pass:ci
+          security create-keychain -p ci "$RUNNER_TEMP/ci.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/ci.keychain-db"
+          security unlock-keychain -p ci "$RUNNER_TEMP/ci.keychain-db"
+          security import "$RUNNER_TEMP/dist.p12" -P ci -A -t cert -f pkcs12 -k "$RUNNER_TEMP/ci.keychain-db"
+          security set-key-partition-list -S apple-tool:,apple: -k ci "$RUNNER_TEMP/ci.keychain-db" > /dev/null
+          security list-keychains -d user -s "$RUNNER_TEMP/ci.keychain-db" login.keychain-db
+          # App Store provisioning profile for this app, made/fetched with the App Store Connect key
+          python3 - <<'PY'
+          import json, os
+          e = os.environ
+          json.dump({"key_id": e["ASC_KEY_ID"], "issuer_id": e["ASC_ISSUER_ID"], "key": e["ASC_KEY_P8"], "in_house": False},
+                    open(os.path.join(e["RUNNER_TEMP"], "asc.json"), "w"))
+          PY
+          fastlane sigh --api_key_path "$RUNNER_TEMP/asc.json" --app_identifier com.abualathari.smartMushaf \
+            --provisioning_name "Tibyan App Store" --force --output_path "$RUNNER_TEMP/pp" --filename appstore.mobileprovision
+          rm -f "$RUNNER_TEMP/asc.json"
+          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< "$(security cms -D -i "$RUNNER_TEMP/pp/appstore.mobileprovision")")
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$RUNNER_TEMP/pp/appstore.mobileprovision" ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
           cat > eo.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
           <key>method</key><string>app-store-connect</string>
           <key>teamID</key><string>${APPLE_TEAM_ID}</string>
-          <key>signingStyle</key><string>automatic</string>
+          <key>signingStyle</key><string>manual</string>
+          <key>signingCertificate</key><string>Apple Distribution</string>
+          <key>provisioningProfiles</key><dict><key>com.abualathari.smartMushaf</key><string>Tibyan App Store</string></dict>
           <key>uploadSymbols</key><true/>
           </dict></plist>
           EOF
           xcodebuild -exportArchive -archivePath build/ios/archive/Runner.xcarchive \
-            -exportOptionsPlist eo.plist -exportPath build/ipa -allowProvisioningUpdates \
-            -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+            -exportOptionsPlist eo.plist -exportPath build/ipa
           ls -la build/ipa
           xcrun altool --upload-app -f build/ipa/*.ipa -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"

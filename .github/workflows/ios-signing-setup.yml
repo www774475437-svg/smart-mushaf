@@ -1,0 +1,50 @@
+name: iOS signing setup (once)
+
+# Makes the private key + certificate request, asks Apple (App Store Connect API) for the
+# distribution certificate, and keeps the key encrypted with KEY_PASSWORD in signing/.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Key, request and certificate
+        env:
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          test -n "$KEY_PASSWORD" && test -n "$ASC_KEY_P8"
+          if [ -f signing/ios_dist.key.enc ] && [ -f signing/ios_dist.cer ]; then echo "Already set up"; exit 0; fi
+          mkdir -p signing
+          openssl genrsa -out "$RUNNER_TEMP/dist.key" 2048
+          openssl req -new -key "$RUNNER_TEMP/dist.key" -out "$RUNNER_TEMP/dist.csr" -subj "/emailAddress=www774475437@gmail.com/CN=Tibyan Distribution/C=US"
+          python3 -m pip install pyjwt cryptography --break-system-packages -q || python3 -m pip install pyjwt cryptography -q
+          python3 - <<'PY'
+          import os, time, json, base64, urllib.request, jwt
+          e = os.environ
+          tok = jwt.encode({"iss": e["ASC_ISSUER_ID"], "iat": int(time.time()), "exp": int(time.time()) + 900, "aud": "appstoreconnect-v1"},
+                           e["ASC_KEY_P8"], algorithm="ES256", headers={"kid": e["ASC_KEY_ID"], "typ": "JWT"})
+          csr = open(os.path.join(e["RUNNER_TEMP"], "dist.csr")).read()
+          body = {"data": {"type": "certificates", "attributes": {"certificateType": "DISTRIBUTION", "csrContent": csr}}}
+          req = urllib.request.Request("https://api.appstoreconnect.apple.com/v1/certificates", data=json.dumps(body).encode(),
+                                       headers={"Authorization": "Bearer " + tok, "Content-Type": "application/json"}, method="POST")
+          try:
+              r = json.load(urllib.request.urlopen(req))
+          except urllib.error.HTTPError as ex:
+              print(ex.read().decode()); raise
+          open("signing/ios_dist.cer", "wb").write(base64.b64decode(r["data"]["attributes"]["certificateContent"]))
+          print("certificate", r["data"]["id"], r["data"]["attributes"]["certificateType"])
+          PY
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -in "$RUNNER_TEMP/dist.key" -out signing/ios_dist.key.enc -pass env:KEY_PASSWORD
+          git config user.name "www774475437-svg"
+          git config user.email "338496743+www774475437-svg@users.noreply.github.com"
+          git add signing/ios_dist.key.enc signing/ios_dist.cer
+          git commit -m "شهادة توقيع نسخة الآيفون (المفتاح مشفّر)"
+          git push
