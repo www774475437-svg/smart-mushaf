@@ -27,6 +27,8 @@ dependencies:
   home_widget: ^0.7.0
   flutter_local_notifications: ^17.2.2
   timezone: ^0.9.4
+  sherpa_onnx: 2.0.1
+  record: ^6.0.0
 
 flutter:
   uses-material-design: true

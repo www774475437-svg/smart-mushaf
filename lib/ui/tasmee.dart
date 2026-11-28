@@ -6,6 +6,7 @@ import '../data/layout.dart';
 import '../data/quran.dart';
 import '../data/surah_names.dart';
 import '../services/settings.dart';
+import '../services/offline_asr.dart';
 import '../services/store.dart';
 import 'common.dart';
 import 'mushaf_lines.dart';
@@ -108,17 +109,42 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   bool peekAll = false;
   int _rangeWrong = 0, _redSeen = 0;
 
+  // recognition inside the phone, with no internet
+  bool _offline = false; // the model is on the phone
+  double? _dl; // download progress
+
   @override
   void initState() {
     super.initState();
     page = widget.page.clamp(1, 604);
     _build();
+    OfflineAsr.I.installed().then((v) {
+      if (mounted && v) setState(() => _offline = true);
+    });
+  }
+
+  Future<void> _getModel() async {
+    if (_dl != null) return;
+    setState(() => _dl = 0);
+    try {
+      await OfflineAsr.I.download((p) {
+        if (mounted) setState(() => _dl = p);
+      });
+      if (mounted) {
+        setState(() => _offline = true);
+        toast(context, 'صار التسميع يعمل بلا إنترنت');
+      }
+    } catch (_) {
+      if (mounted) toast(context, 'تعذّر التحميل، تأكد من الإنترنت وأعد المحاولة (يكمل من حيث توقف)');
+    }
+    if (mounted) setState(() => _dl = null);
   }
 
   @override
   void dispose() {
     on = false;
     _stt.cancel();
+    OfflineAsr.I.close();
     super.dispose();
   }
 
@@ -199,9 +225,19 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   Future<void> _toggle() async {
     if (on) {
       on = false;
-      await _stt.stop();
+      if (_offline) {
+        await OfflineAsr.I.pause();
+      } else {
+        await _stt.stop();
+      }
       _saveMistakes();
       if (mounted) setState(() => listening = false);
+      return;
+    }
+    if (_offline) {
+      on = true;
+      setState(() => err = null);
+      _listen();
       return;
     }
     if (!ready) {
@@ -235,10 +271,28 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   }
 
   Future<void> _listen() async {
+    on = true;
     _from = 0;
     _lastLen = 0;
     _rebase();
     if (mounted) setState(() => listening = true);
+    if (_offline) {
+      heard = '';
+      if (OfflineAsr.I.running) return; // the microphone is already open: go on with the new page
+      final e = await OfflineAsr.I.start((t) {
+        if (!mounted || !on) return;
+        heard = '$heard $t'.trim();
+        _consume(normalizeAr(heard).split(' ').where((w) => w.isNotEmpty).toList());
+      });
+      if (e != null && mounted) {
+        on = false;
+        setState(() {
+          err = e;
+          listening = false;
+        });
+      }
+      return;
+    }
     try {
       await _stt.listen(
         onResult: (r) {
@@ -419,7 +473,9 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     final n = page + d;
     if (n < 1 || n > 604) return;
     _stt.cancel();
-    on = false;
+    final auto = _offline && on && (widget.follow || widget.toG != null);
+    if (_offline && !auto) OfflineAsr.I.pause();
+    on = auto;
     setState(() {
       page = n;
       listening = false;
@@ -494,6 +550,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
                     TextButton.icon(
                       onPressed: () => setState(() {
                         _stt.cancel();
+                        if (_offline) OfflineAsr.I.pause();
                         on = false;
                         listening = false;
                         _build();
@@ -526,6 +583,39 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
               ),
             ),
           ),
+          if (OfflineAsr.supported)
+            Container(
+              color: col.soft,
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+              child: _offline
+                  ? ValueListenableBuilder<bool>(
+                      valueListenable: OfflineAsr.I.busy,
+                      builder: (_, b, __) => Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.offline_bolt_rounded, size: 16, color: green),
+                          const SizedBox(width: 6),
+                          Text(b ? 'يكتب ما قرأت…' : 'التسميع بلا إنترنت • يظهر ما قرأته بعد كل وقفة',
+                              style: TextStyle(fontSize: 12, color: green, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    )
+                  : _dl != null
+                      ? Column(
+                          children: [
+                            Text('تحميل نموذج الصوت ${ar((_dl! * 100).round())}٪', style: TextStyle(fontSize: 12, color: green)),
+                            const SizedBox(height: 4),
+                            LinearProgressIndicator(value: _dl, minHeight: 4, color: green),
+                          ],
+                        )
+                      : TextButton.icon(
+                          onPressed: _getModel,
+                          icon: Icon(Icons.download_for_offline_rounded, size: 18, color: green),
+                          label: Text('حمّل نموذج الصوت للتسميع بلا إنترنت (١٦٠ ميجابايت)',
+                              style: TextStyle(color: green, fontSize: 12.5)),
+                        ),
+            ),
           Container(
             color: col.soft,
             width: double.infinity,
