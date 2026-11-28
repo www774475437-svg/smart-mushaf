@@ -24,12 +24,12 @@ class AppSettings extends ChangeNotifier {
   set theme(ReadTheme v) => _set('theme', v.index);
 
   // ---- tasmee ----
-  bool get tasOffline => _p.getBool('tasOffline') ?? true;
-  set tasOffline(bool v) => _set('tasOffline', v);
+  bool get tasOffline => _p.getBool('tasOffline2') ?? true;
+  set tasOffline(bool v) => _set('tasOffline2', v);
 
-  /// 'base' hears best, 'tiny' is faster
-  String get tasModel => _p.getString('tasModel') ?? 'base';
-  set tasModel(String v) => _set('tasModel', v);
+  /// 'ctc' follows at once (inside the app); 'tiny' and 'base' also check the tashkeel
+  String get tasModel => _p.getString('tasModel2') ?? 'ctc';
+  set tasModel(String v) => _set('tasModel2', v);
 
   bool get tasTashkeel => _p.getBool('tasTashkeel') ?? true;
   set tasTashkeel(bool v) => _set('tasTashkeel', v);

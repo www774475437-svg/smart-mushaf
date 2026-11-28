@@ -37,6 +37,7 @@ flutter:
     - assets/images/
     - assets/qcf/
     - assets/gharib/
+    - assets/asr/
   fonts:
     - family: AmiriQuran
       fonts:

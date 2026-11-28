@@ -4,6 +4,7 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -26,6 +27,13 @@ class OfflineAsr {
   /// The two models: «base» hears best, «tiny» is about twice as fast (for older phones).
   /// file name -> [release, smallest size that counts as a complete download]
   static const Map<String, Map<String, List<Object>>> models = {
+    // «ctc» is Abdou/quran-asr-tiny (MIT): small and many times faster than real time. It comes
+    // inside the app, so reciting works with no download and no internet from the first minute.
+    'ctc': {
+      'model.int8.onnx': ['asr-quran-ctc', 18000000],
+      'tokens.txt': ['asr-quran-ctc', 100],
+      'silero_vad.onnx': ['asr-quran-base', 500000],
+    },
     'base': {
       'encoder.int8.onnx': ['asr-quran-base', 25000000],
       'decoder.int8.onnx': ['asr-quran-base', 120000000],
@@ -39,12 +47,12 @@ class OfflineAsr {
       'silero_vad.onnx': ['asr-quran-base', 500000],
     },
   };
-  static const Map<String, int> totalBytes = {'base': 161200000, 'tiny': 104300000};
+  static const Map<String, int> totalBytes = {'ctc': 19500000, 'base': 161200000, 'tiny': 104300000};
 
   static bool get supported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   /// The model the next listening session uses.
-  String kind = 'base';
+  String kind = 'ctc';
 
   Future<String> _dir(String k) async {
     final d = Directory('${(await getApplicationSupportDirectory()).path}/${k == 'base' ? 'asr' : 'asr_$k'}');
@@ -52,8 +60,22 @@ class OfflineAsr {
     return d.path;
   }
 
+  /// Copies the model that ships inside the app to where the engine can read it (once).
+  Future<void> _unpack() async {
+    try {
+      final d = await _dir('ctc');
+      for (final e in models['ctc']!.entries) {
+        final f = File('$d/${e.key}');
+        if (await f.exists() && await f.length() >= (e.value[1] as int)) continue;
+        final b = await rootBundle.load('assets/asr/${e.key}');
+        await f.writeAsBytes(b.buffer.asUint8List(b.offsetInBytes, b.lengthInBytes), flush: true);
+      }
+    } catch (_) {}
+  }
+
   Future<bool> installed(String k) async {
     if (!supported) return false;
+    if (k == 'ctc') await _unpack();
     try {
       final d = await _dir(k);
       for (final e in models[k]!.entries) {
@@ -155,7 +177,7 @@ class OfflineAsr {
         }
       });
       try {
-        _iso = await Isolate.spawn(_worker, [from.sendPort, d]);
+        _iso = await Isolate.spawn(_worker, [from.sendPort, d, kind]);
       } catch (_) {
         return 'تعذّر تشغيل نموذج الصوت على هذا الجهاز.';
       }
@@ -211,19 +233,29 @@ class OfflineAsr {
 void _worker(List<dynamic> args) {
   final out = args[0] as SendPort;
   final dir = args[1] as String;
+  final ctc = args[2] == 'ctc';
+  // the fast model writes what is being said three times a second
+  final minStep = ctc ? 4800 : 9600, minLen = ctc ? 6400 : 11200;
   late so.OfflineRecognizer rec;
   late so.VoiceActivityDetector vad;
   try {
     so.initBindings();
     rec = so.OfflineRecognizer(so.OfflineRecognizerConfig(
-      model: so.OfflineModelConfig(
-        whisper: so.OfflineWhisperModelConfig(
-            encoder: '$dir/encoder.int8.onnx', decoder: '$dir/decoder.int8.onnx', language: 'ar', task: 'transcribe'),
-        tokens: '$dir/tokens.txt',
-        modelType: 'whisper',
-        numThreads: 4,
-        debug: false,
-      ),
+      model: ctc
+          ? so.OfflineModelConfig(
+              zipformerCtc: so.OfflineZipformerCtcModelConfig(model: '$dir/model.int8.onnx'),
+              tokens: '$dir/tokens.txt',
+              numThreads: 2,
+              debug: false,
+            )
+          : so.OfflineModelConfig(
+              whisper: so.OfflineWhisperModelConfig(
+                  encoder: '$dir/encoder.int8.onnx', decoder: '$dir/decoder.int8.onnx', language: 'ar', task: 'transcribe'),
+              tokens: '$dir/tokens.txt',
+              modelType: 'whisper',
+              numThreads: 4,
+              debug: false,
+            ),
     ));
     vad = so.VoiceActivityDetector(
       config: so.VadModelConfig(
@@ -243,7 +275,7 @@ void _worker(List<dynamic> args) {
 
   // the stretch being said now, kept so it can be written down before it ends
   final cur = <Float32List>[];
-  var curLen = 0, lastPartial = 0, step = 9600; // samples
+  var curLen = 0, lastPartial = 0, step = minStep; // samples
   final pre = <Float32List>[]; // a little sound from before speech was noticed
 
   String write(Float32List samples) {
@@ -279,7 +311,7 @@ void _worker(List<dynamic> args) {
   }
 
   void partial() {
-    if (curLen < 11200 || curLen - lastPartial < step) return;
+    if (curLen < minLen || curLen - lastPartial < step) return;
     lastPartial = curLen;
     final all = Float32List(curLen);
     var o = 0;
@@ -293,7 +325,7 @@ void _worker(List<dynamic> args) {
     } catch (_) {}
     // a slow phone writes less often, so it never falls behind the reciter
     final ms = DateTime.now().difference(t0).inMilliseconds;
-    step = (ms * 16 * 1.4).round().clamp(9600, 48000);
+    step = (ms * 16 * 1.4).round().clamp(minStep, 48000);
   }
 
   final port = ReceivePort();

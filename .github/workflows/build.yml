@@ -40,6 +40,14 @@ jobs:
       - name: Download Quran data and fonts
         run: python3 tool/build_data.py
 
+      - name: Put the fast recitation model inside the app
+        run: |
+          B=https://github.com/www774475437-svg/smart-mushaf-store/releases/download
+          curl -fsSL -o assets/asr/model.int8.onnx $B/asr-quran-ctc/model.int8.onnx
+          curl -fsSL -o assets/asr/tokens.txt $B/asr-quran-ctc/tokens.txt
+          curl -fsSL -o assets/asr/silero_vad.onnx $B/asr-quran-base/silero_vad.onnx
+          ls -la assets/asr
+
       - name: Signing key (kept in the private build cache)
         id: keycache
         uses: actions/cache@v4

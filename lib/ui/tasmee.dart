@@ -51,9 +51,10 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   // recognition inside the phone, with no internet
   final Set<String> _have = {}; // the models that are on the phone
   bool get _model => _have.isNotEmpty;
-  String get _kind => _have.contains(AppSettings.I.tasModel) ? AppSettings.I.tasModel : (_have.isEmpty ? 'base' : _have.first);
+  String get _kind => _have.contains(AppSettings.I.tasModel) ? AppSettings.I.tasModel : (_have.contains('ctc') || _have.isEmpty ? 'ctc' : _have.first);
   bool get _offline => _model && AppSettings.I.tasOffline;
   String? _dlKind;
+  String _mName(String k) => k == 'ctc' ? 'الفوري' : (k == 'tiny' ? 'المدقِّق السريع' : 'المدقِّق الدقيق');
   bool _askedModel = false;
   String _done = ''; // what was written down for good in this listening session
   bool _quiet = false; // a guess made while the words are still being said
@@ -66,7 +67,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     super.initState();
     page = widget.page.clamp(1, 604);
     _build();
-    for (final k in const ['base', 'tiny']) {
+    for (final k in const ['ctc', 'base', 'tiny']) {
       OfflineAsr.I.installed(k).then((v) {
         if (mounted && v) setState(() => _have.add(k));
       });
@@ -229,9 +230,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
                 if (_model)
                   FilledButton(onPressed: () => Navigator.pop(c, 'use'), child: const Text('استعمل نموذج القرآن'))
                 else ...[
-                  FilledButton(onPressed: () => Navigator.pop(c, 'tiny'), child: const Text('حمّل النموذج السريع (١٠٤ م.ب) — للأجهزة القديمة')),
-                  const SizedBox(height: 8),
-                  FilledButton.tonal(onPressed: () => Navigator.pop(c, 'base'), child: const Text('حمّل النموذج الدقيق (١٦٠ م.ب)')),
+                  FilledButton(onPressed: () => Navigator.pop(c, 'ctc'), child: const Text('حمّل النموذج الفوري (١٩ م.ب)')),
                 ],
                 TextButton(onPressed: () => Navigator.pop(c, 'online'), child: const Text('أكمل بالإنترنت')),
               ],
@@ -247,7 +246,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
         _listen();
         return;
       }
-      if (pick == 'tiny' || pick == 'base') {
+      if (pick == 'ctc') {
         AppSettings.I.tasOffline = true;
         _getModel(pick!);
         return;
@@ -435,30 +434,15 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   Widget _dlRow(Color green) => _dl != null
       ? Column(
           children: [
-            Text('تحميل النموذج ${_dlKind == 'tiny' ? 'السريع' : 'الدقيق'} ${ar((_dl! * 100).round())}٪', style: TextStyle(fontSize: 12, color: green)),
+            Text('تحميل النموذج ${_mName(_dlKind ?? 'ctc')} ${ar((_dl! * 100).round())}٪', style: TextStyle(fontSize: 12, color: green)),
             const SizedBox(height: 4),
             LinearProgressIndicator(value: _dl, minHeight: 4, color: green),
           ],
         )
-      : Column(
-          children: [
-            Text('حمّل نموذج الصوت للتسميع بلا إنترنت', style: TextStyle(fontSize: 12, color: green, fontWeight: FontWeight.w600)),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                TextButton.icon(
-                  onPressed: () => _getModel('tiny'),
-                  icon: Icon(Icons.bolt_rounded, size: 18, color: green),
-                  label: Text('السريع (١٠٤ م.ب)', style: TextStyle(color: green, fontSize: 12.5)),
-                ),
-                TextButton.icon(
-                  onPressed: () => _getModel('base'),
-                  icon: Icon(Icons.verified_outlined, size: 18, color: green),
-                  label: Text('الدقيق (١٦٠ م.ب)', style: TextStyle(color: green, fontSize: 12.5)),
-                ),
-              ],
-            ),
-          ],
+      : TextButton.icon(
+          onPressed: () => _getModel('ctc'),
+          icon: Icon(Icons.download_for_offline_rounded, size: 18, color: green),
+          label: Text('حمّل نموذج القرآن للتسميع بلا إنترنت (١٩ م.ب)', style: TextStyle(color: green, fontSize: 12.5)),
         );
 
   Future<void> _stopAll() async {
@@ -511,10 +495,11 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
                   if (OfflineAsr.supported && a.tasOffline) ...[
                     head('نموذج الصوت'),
                     chips([
-                      _have.contains('tiny') ? 'السريع' : 'السريع (تحميل ١٠٤ م.ب)',
-                      _have.contains('base') ? 'الدقيق' : 'الدقيق (تحميل ١٦٠ م.ب)',
-                    ], _model ? (_kind == 'tiny' ? 0 : 1) : -1, (i) {
-                      final k = i == 0 ? 'tiny' : 'base';
+                      'الفوري (داخل التطبيق)',
+                      _have.contains('tiny') ? 'المدقِّق السريع' : 'المدقِّق السريع (تحميل ١٠٤ م.ب)',
+                      _have.contains('base') ? 'المدقِّق الدقيق' : 'المدقِّق الدقيق (تحميل ١٦٠ م.ب)',
+                    ], const ['ctc', 'tiny', 'base'].indexOf(_kind), (i) {
+                      final k = const ['ctc', 'tiny', 'base'][i];
                       _stopAll();
                       if (_have.contains(k)) {
                         a.tasModel = k;
@@ -524,6 +509,14 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
                         _getModel(k);
                       }
                     }),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(18, 2, 18, 0),
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text('الفوري يتابعك كلمة بكلمة لحظة النطق. المدقِّقان أبطأ ويدققان التشكيل أيضًا.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      ),
+                    ),
                   ],
                   head('دقة الحساب'),
                   chips(const ['متسامح', 'متوسط', 'دقيق'], a.tasStrict, (i) => a.tasStrict = i),
@@ -541,7 +534,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
                   SwitchListTile(
                       dense: true,
                       title: const Text('تدقيق التشكيل (تجريبي)'),
-                      subtitle: const Text('الكلمة التي نُطقت بحركة مخالفة تظهر بالأزرق • بلا إنترنت فقط', style: TextStyle(fontSize: 11.5)),
+                      subtitle: const Text('الكلمة التي نُطقت بحركة مخالفة تظهر بالأزرق • مع النموذجين المدقِّقين', style: TextStyle(fontSize: 11.5)),
                       value: a.tasTashkeel,
                       onChanged: (v) => set(() => a.tasTashkeel = v)),
                   SwitchListTile(dense: true, title: const Text('الاهتزاز عند الخطأ'), value: a.tasVibrate, onChanged: (v) => set(() => a.tasVibrate = v)),
@@ -551,11 +544,11 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
                     setState(() {});
                   }),
                   SwitchListTile(dense: true, title: const Text('إبقاء الشاشة مضاءة'), value: a.keepAwake, onChanged: (v) => set(() => a.keepAwake = v)),
-                  for (final k in _have.toList())
+                  for (final k in _have.where((k) => k != 'ctc').toList())
                     ListTile(
                       dense: true,
                       leading: const Icon(Icons.delete_outline_rounded),
-                      title: Text('حذف النموذج ${k == 'tiny' ? 'السريع' : 'الدقيق'} من الجوال'),
+                      title: Text('حذف النموذج ${_mName(k)} من الجوال'),
                       onTap: () async {
                         Navigator.pop(c);
                         await _stopAll();
@@ -705,7 +698,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
                         children: [
                           Icon(Icons.offline_bolt_rounded, size: 16, color: green),
                           const SizedBox(width: 6),
-                          Text(b ? 'يكتب ما قرأت…' : 'بلا إنترنت • النموذج ${_kind == 'tiny' ? 'السريع' : 'الدقيق'} • تظهر الكلمات وأنت تقرأ',
+                          Text('بلا إنترنت • النموذج ${_mName(_kind)} • تظهر الكلمات وأنت تقرأ',
                               style: TextStyle(fontSize: 12, color: green, fontWeight: FontWeight.w600)),
                         ],
                       ),
