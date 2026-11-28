@@ -1,0 +1,55 @@
+name: Measure tasmee
+
+# Runs the offline listener on real recitations of whole pages and counts the words the app
+# would wrongly mark, and how far behind the reciter it runs.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/eval.yml
+      - tool/sim_asr.py
+      - tool/eval_matcher.dart
+      - lib/services/recite_matcher.dart
+
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Quran data
+        uses: actions/cache@v4
+        with:
+          path: |
+            assets/data
+            assets/fonts
+            assets/qcf
+          key: quran-data-${{ hashFiles('tool/build_data.py') }}
+      - run: test -f assets/data/layout2.json.gz || python3 tool/build_data.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: dart-lang/setup-dart@v1
+      - name: Tools and models
+        run: |
+          pip install -q sherpa-onnx librosa numpy soundfile
+          gh release download asr-quran-base -R www774475437-svg/smart-mushaf-store -D base -p '*.onnx' -p tokens.txt
+          gh release download asr-quran-tiny -R www774475437-svg/smart-mushaf-store -D tiny -p '*.onnx' -p tokens.txt
+          mkdir vad && cp base/silero_vad.onnx vad/
+      - name: Listen
+        run: |
+          python tool/sim_asr.py tiny tiny.json
+          python tool/sim_asr.py base base.json
+      - name: Count
+        run: |
+          mkdir -p ev/tool ev/lib/services
+          cp tool/eval_matcher.dart ev/tool/ && cp lib/services/recite_matcher.dart ev/lib/services/
+          cd ev
+          for m in tiny base; do dart tool/eval_matcher.dart ../$m.json 1; done
