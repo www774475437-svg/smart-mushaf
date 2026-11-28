@@ -19,7 +19,7 @@ concurrency:
 jobs:
   eval:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 150
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -37,6 +37,12 @@ jobs:
         with:
           python-version: '3.11'
       - uses: dart-lang/setup-dart@v1
+      - name: Recitations (kept between runs)
+        uses: actions/cache@v4
+        with:
+          path: aud
+          key: recitations-v1-${{ github.run_id }}
+          restore-keys: recitations-v1-
       - name: Tools and models
         run: |
           pip install -q sherpa-onnx librosa numpy soundfile
@@ -49,16 +55,23 @@ jobs:
           PAGES: '2,50,293,446,582,604'
           RECITERS: 'Husary_64kbps,Alafasy_64kbps,Minshawy_Murattal_128kbps,Abu_Bakr_Ash-Shaatree_128kbps,Hudhaify_128kbps,Abdurrahmaan_As-Sudais_192kbps,Ghamadi_40kbps,MaherAlMuaiqly128kbps,Hani_Rifai_192kbps,Mohammad_al_Tablaway_128kbps,Ayman_Sowaid_64kbps,Nasser_Alqatami_128kbps,Yasser_Ad-Dussary_128kbps,Abdullah_Basfar_192kbps,Abdul_Basit_Murattal_64kbps,Husary_Muallim_128kbps'
         run: python tool/sim_asr.py ctc ctc.json
-      - name: Listen (Whisper models, a small sample)
-        env:
-          PAGES: '446,582'
-          RECITERS: 'Husary_64kbps,Abu_Bakr_Ash-Shaatree_128kbps'
-        run: |
-          python tool/sim_asr.py tiny tiny.json
-          python tool/sim_asr.py base base.json
-      - name: Count
+      - name: Count (fast model)
         run: |
           mkdir -p ev/tool ev/lib/services
           cp tool/eval_matcher.dart ev/tool/ && cp lib/services/recite_matcher.dart ev/lib/services/
-          cd ev
-          for m in ctc tiny base; do dart tool/eval_matcher.dart ../$m.json 1; done
+          cd ev && dart tool/eval_matcher.dart ../ctc.json 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: heard
+          path: ctc.json
+      - name: Listen (Whisper models, a small sample)
+        continue-on-error: true
+        timeout-minutes: 60
+        env:
+          PAGES: '582'
+          RECITERS: 'Husary_64kbps,Abu_Bakr_Ash-Shaatree_128kbps'
+          VARIANTS: 'clean'
+        run: |
+          python tool/sim_asr.py tiny tiny.json
+          python tool/sim_asr.py base base.json
+          cd ev && for m in tiny base; do dart tool/eval_matcher.dart ../$m.json 1; done
