@@ -1,0 +1,26 @@
+name: Count tasmee
+
+# Replays what the fast model heard (branch eval-data) through the app's matcher: one minute.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/count.yml
+      - tool/eval_matcher.dart
+      - lib/services/recite_matcher.dart
+
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: eval-data
+          path: heard
+      - uses: dart-lang/setup-dart@v1
+      - run: |
+          mkdir -p ev/tool ev/lib/services
+          cp tool/eval_matcher.dart ev/tool/ && cp lib/services/recite_matcher.dart ev/lib/services/
+          cd ev && dart tool/eval_matcher.dart ../heard/ctc.json 1

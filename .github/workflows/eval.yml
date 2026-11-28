@@ -9,12 +9,13 @@ on:
     paths:
       - .github/workflows/eval.yml
       - tool/sim_asr.py
-      - tool/eval_matcher.dart
-      - lib/services/recite_matcher.dart
 
 concurrency:
   group: eval-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: write
 
 jobs:
   eval:
@@ -60,18 +61,10 @@ jobs:
           mkdir -p ev/tool ev/lib/services
           cp tool/eval_matcher.dart ev/tool/ && cp lib/services/recite_matcher.dart ev/lib/services/
           cd ev && dart tool/eval_matcher.dart ../ctc.json 1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: heard
-          path: ctc.json
-      - name: Listen (Whisper models, a small sample)
-        continue-on-error: true
-        timeout-minutes: 60
-        env:
-          PAGES: '582'
-          RECITERS: 'Husary_64kbps,Abu_Bakr_Ash-Shaatree_128kbps'
-          VARIANTS: 'clean'
+      - name: Keep what was heard (branch eval-data), so the matcher can be measured again in a minute
         run: |
-          python tool/sim_asr.py tiny tiny.json
-          python tool/sim_asr.py base base.json
-          cd ev && for m in tiny base; do dart tool/eval_matcher.dart ../$m.json 1; done
+          mkdir keep && cp ctc.json keep/ && cd keep
+          git init -q -b eval-data
+          git -c user.name=www774475437-svg -c user.email=338496743+www774475437-svg@users.noreply.github.com add ctc.json
+          git -c user.name=www774475437-svg -c user.email=338496743+www774475437-svg@users.noreply.github.com commit -qm "what the fast model heard"
+          git push -q -f https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }} eval-data

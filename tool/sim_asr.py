@@ -11,7 +11,7 @@ MODEL, OUT = sys.argv[1], sys.argv[2]
 SLOW = float(os.environ.get('SLOW', '3'))  # the phone is about this much slower than the build machine
 PAGES = [int(x) for x in os.environ.get('PAGES', '2,446,582,604').split(',')]
 RECITERS = os.environ.get('RECITERS', 'Husary_64kbps,Alafasy_64kbps,Minshawy_Murattal_128kbps,Abu_Bakr_Ash-Shaatree_128kbps').split(',')
-VARIANTS = os.environ.get('VARIANTS', 'clean,room').split(',')
+VARIANTS = os.environ.get('VARIANTS', 'clean,room,noisy').split(',')
 
 lay = json.loads(gzip.open('assets/data/layout2.json.gz').read())['p']
 q = json.load(open('assets/data/quran.json', encoding='utf-8'))
@@ -136,7 +136,10 @@ for p in PAGES:
         for v in VARIANTS:
             x = audio
             if v == 'room':
-                # a phone held away from the mouth in a room: quieter, with hiss
+                # a phone on the table in a quiet room: softer, with a little hiss
+                x = (audio * 0.5 + rng.normal(0, 0.003, len(audio))).astype(np.float32)
+            if v == 'noisy':
+                # far from the mouth with loud hiss: the hard case
                 x = (audio * 0.35 + rng.normal(0, 0.012, len(audio))).astype(np.float32)
             t0 = time.time()
             ev = simulate(x)
