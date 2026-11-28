@@ -54,6 +54,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   String get _kind => _have.contains(AppSettings.I.tasModel) ? AppSettings.I.tasModel : (_have.isEmpty ? 'base' : _have.first);
   bool get _offline => _model && AppSettings.I.tasOffline;
   String? _dlKind;
+  bool _askedModel = false;
   String _done = ''; // what was written down for good in this listening session
   bool _quiet = false; // a guess made while the words are still being said
   Timer? _tick;
@@ -201,6 +202,57 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
       setState(() => err = null);
       _listen();
       return;
+    }
+    // The phone's own recognizer hears everyday Arabic, not recitation, and stops at every pause:
+    // offer the Quran model before falling back to it.
+    if (OfflineAsr.supported && !_askedModel && _dl == null) {
+      _askedModel = true;
+      final pick = await showModalBottomSheet<String>(
+        context: context,
+        showDragHandle: true,
+        builder: (c) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(_model ? 'التسميع بنموذج القرآن أدق' : 'حمّل نموذج القرآن للتسميع المتقن',
+                    textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                const Text(
+                    'التسميع بالإنترنت يستعمل تعرّف الجوال على الكلام العادي: يخطئ في التلاوة ويتوقف عند كل وقفة.\n'
+                    'نموذج القرآن مدرَّب على التلاوة، يعمل بلا إنترنت، لا يتوقف عند الوقف، ويدقق التشكيل.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13.5, height: 1.7)),
+                const SizedBox(height: 14),
+                if (_model)
+                  FilledButton(onPressed: () => Navigator.pop(c, 'use'), child: const Text('استعمل نموذج القرآن'))
+                else ...[
+                  FilledButton(onPressed: () => Navigator.pop(c, 'tiny'), child: const Text('حمّل النموذج السريع (١٠٤ م.ب) — للأجهزة القديمة')),
+                  const SizedBox(height: 8),
+                  FilledButton.tonal(onPressed: () => Navigator.pop(c, 'base'), child: const Text('حمّل النموذج الدقيق (١٦٠ م.ب)')),
+                ],
+                TextButton(onPressed: () => Navigator.pop(c, 'online'), child: const Text('أكمل بالإنترنت')),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (!mounted) return;
+      if (pick == 'use') {
+        AppSettings.I.tasOffline = true;
+        on = true;
+        setState(() => err = null);
+        _listen();
+        return;
+      }
+      if (pick == 'tiny' || pick == 'base') {
+        AppSettings.I.tasOffline = true;
+        _getModel(pick!);
+        return;
+      }
+      if (pick == null) return;
     }
     if (!ready) {
       ready = await _stt.initialize(
