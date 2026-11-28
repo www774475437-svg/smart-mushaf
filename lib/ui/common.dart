@@ -283,3 +283,91 @@ String hizbLabel(int hq) {
       return 'الحزب $h';
   }
 }
+
+
+/// A request to show one of the main sections (0 home, 1 index, 2 majlis, 3 memorize, 4 settings),
+/// made from a page that sits above them, such as the mushaf.
+final ValueNotifier<int?> navRequest = ValueNotifier<int?>(null);
+
+/// The main bar of the app: a floating pill with the sections, and a round search button beside it.
+class NavPill extends StatelessWidget {
+  final int selected; // -1 when none of the sections is showing
+  final ValueChanged<int> onTap;
+  final VoidCallback onSearch;
+  const NavPill({super.key, required this.selected, required this.onTap, required this.onSearch});
+
+  static const _items = <(int, IconData, IconData, String)>[
+    (0, Icons.home_outlined, Icons.home_rounded, 'الرئيسية'),
+    (1, Icons.menu_book_outlined, Icons.menu_book_rounded, 'الفهرس'),
+    (2, Icons.groups_outlined, Icons.groups_rounded, 'المجلس'),
+    (3, Icons.record_voice_over_outlined, Icons.record_voice_over_rounded, 'الحفظ'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final dark = isDark(context);
+    final bg = dark ? const Color(0xFF1B2623) : const Color(0xFFF1EEE6);
+    final line = dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.07);
+    final idle = dark ? Colors.white70 : const Color(0xFF2B2B28);
+    final shadow = [BoxShadow(color: Colors.black.withValues(alpha: 0.14), blurRadius: 18, offset: const Offset(0, 6))];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 66,
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                  color: bg, borderRadius: BorderRadius.circular(34), border: Border.all(color: line), boxShadow: shadow),
+              child: Row(
+                children: [
+                  for (final it in _items)
+                    Expanded(
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(28),
+                        onTap: () => onTap(it.$1),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          decoration: BoxDecoration(
+                            color: selected == it.$1 ? cs.primary.withValues(alpha: 0.14) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(selected == it.$1 ? it.$3 : it.$2, size: 24, color: selected == it.$1 ? cs.primary : idle),
+                              const SizedBox(height: 2),
+                              Text(it.$4,
+                                  maxLines: 1,
+                                  style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: selected == it.$1 ? FontWeight.w800 : FontWeight.w600,
+                                      color: selected == it.$1 ? cs.primary : idle)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Material(
+            color: bg,
+            shape: CircleBorder(side: BorderSide(color: line)),
+            elevation: 5,
+            shadowColor: Colors.black45,
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onSearch,
+              child: SizedBox(width: 62, height: 62, child: Icon(Icons.search_rounded, size: 28, color: idle)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -345,10 +345,10 @@ class _MushafScreenState extends State<MushafScreen> {
                       children: [
                         const SizedBox(width: 6),
                         IconButton(
-                          tooltip: 'الفهرس',
-                          icon: const Icon(Icons.format_list_bulleted_rounded),
+                          tooltip: 'الرئيسية',
+                          icon: const Icon(Icons.home_outlined),
                           color: ic,
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: () => _toSection(0),
                         ),
                         IconButton(
                           tooltip: 'البحث',
@@ -432,6 +432,7 @@ class _MushafScreenState extends State<MushafScreen> {
               ),
               child: SafeArea(
                 top: false,
+                bottom: false,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(14, 2, 14, 2),
                   child: Row(
@@ -467,10 +468,28 @@ class _MushafScreenState extends State<MushafScreen> {
                 ),
               ),
             ),
+            Container(
+              color: col.soft,
+              padding: const EdgeInsets.only(top: 4),
+              child: SafeArea(
+                top: false,
+                child: NavPill(
+                  selected: -1,
+                  onTap: _toSection,
+                  onSearch: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchScreen())),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  /// Leaves the mushaf for one of the main sections of the app.
+  void _toSection(int i) {
+    navRequest.value = i;
+    Navigator.of(context).popUntil((r) => r.isFirst);
   }
 
   Widget _autoPill(PageColors col) {

@@ -62,6 +62,12 @@ class SettingsScreen extends StatelessWidget {
                       style: TextStyle(fontFamily: quranFont(), fontSize: st.fontSize, height: 1.9)),
                 ),
                 SwitchListTile(
+                  title: const Text('فتح المصحف مباشرة عند تشغيل التطبيق'),
+                  subtitle: const Text('يفتح على آخر صفحة قرأتها، واضغط على الصفحة لتظهر الأزرار'),
+                  value: AppSettings.I.openMushaf,
+                  onChanged: (v) => AppSettings.I.openMushaf = v,
+                ),
+                SwitchListTile(
                   secondary: const IconSquare(Icons.crop_square_rounded, kGold),
                   title: const Text('إطار الصفحة', style: TextStyle(fontWeight: FontWeight.w600)),
                   value: st.showPageFrame,

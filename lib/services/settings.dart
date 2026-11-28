@@ -51,6 +51,10 @@ class AppSettings extends ChangeNotifier {
   bool get tasAutoNext => _p.getBool('tasAutoNext') ?? false;
   set tasAutoNext(bool v) => _set('tasAutoNext', v);
 
+  /// Open the mushaf at the last page as soon as the app starts.
+  bool get openMushaf => _p.getBool('openMushaf') ?? true;
+  set openMushaf(bool v) => _set('openMushaf', v);
+
   bool get scrollMode => _p.getBool('scrollMode') ?? false;
   set scrollMode(bool v) => _set('scrollMode', v);
 

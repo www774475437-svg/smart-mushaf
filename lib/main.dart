@@ -21,6 +21,7 @@ import 'services/notify.dart';
 import 'ui/majlis.dart';
 import 'ui/prayer_screen.dart';
 import 'ui/reader.dart';
+import 'ui/search.dart';
 import 'ui/tasmee.dart';
 import 'services/widget_bridge.dart';
 import 'ui/memorize.dart';
@@ -135,16 +136,42 @@ class _RootNavState extends State<RootNav> {
   @override
   void initState() {
     super.initState();
+    navRequest.addListener(_onNav);
     if (WidgetBridge.supported) {
       WidgetBridge.init();
       Notify.init();
-      HomeWidget.initiallyLaunchedFromHomeWidget().then(_fromWidget).catchError((_) {});
+      HomeWidget.initiallyLaunchedFromHomeWidget().then((u) {
+        if (u != null) {
+          _fromWidget(u);
+        } else {
+          _openMushaf();
+        }
+      }).catchError((_) => _openMushaf());
       _sub = HomeWidget.widgetClicked.listen(_fromWidget, onError: (_) {});
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openMushaf());
     }
+  }
+
+  bool _opened = false;
+
+  /// The app starts inside the mushaf, at the page where the reader stopped.
+  void _openMushaf() {
+    if (_opened || !mounted || !AppSettings.I.openMushaf) return;
+    _opened = true;
+    MushafScreen.open(context, UserStore.I.lastPage.clamp(1, 604));
+  }
+
+  void _onNav() {
+    final i = navRequest.value;
+    if (i == null || !mounted) return;
+    navRequest.value = null;
+    setState(() => _i = i);
   }
 
   @override
   void dispose() {
+    navRequest.removeListener(_onNav);
     _sub?.cancel();
     super.dispose();
   }
@@ -191,38 +218,8 @@ class _RootNavState extends State<RootNav> {
     }
   }
 
-  Widget _item(int i, IconData icon, IconData sel, String label) {
-    final cs = Theme.of(context).colorScheme;
-    final on = _i == i;
-    return Expanded(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: () => setState(() => _i = i),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              decoration: BoxDecoration(
-                color: on ? cs.primary.withValues(alpha: 0.14) : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(on ? sel : icon, color: on ? cs.primary : Colors.grey, size: 24),
-            ),
-            const SizedBox(height: 2),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 11.5, fontWeight: on ? FontWeight.w700 : FontWeight.w500, color: on ? cs.primary : Colors.grey)),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final pages = <Widget>[
       HomeScreen(onTab: (i) => setState(() => _i = i)),
       const IndexScreen(),
@@ -230,49 +227,13 @@ class _RootNavState extends State<RootNav> {
       const MemorizeScreen(),
       const SettingsScreen(),
     ];
-    final on = _i == 2;
     return Scaffold(
       body: IndexedStack(index: _i, children: pages),
       bottomNavigationBar: SafeArea(
-        child: Container(
-          height: 68,
-          margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          decoration: BoxDecoration(
-            color: cs.surface,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 16, offset: const Offset(0, 4))],
-          ),
-          child: Row(
-            children: [
-              _item(0, Icons.home_outlined, Icons.home_rounded, 'الرئيسية'),
-              _item(1, Icons.menu_book_outlined, Icons.menu_book_rounded, 'الفهرس'),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _i = 2),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 46,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(colors: on ? [kGoldDeep, kGold] : [kEmeraldDark, kEmerald]),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [BoxShadow(color: kEmerald.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 3))],
-                        ),
-                        child: const Icon(Icons.groups_rounded, color: Colors.white, size: 26),
-                      ),
-                      const SizedBox(height: 2),
-                      Text('مجلس الحفاظ',
-                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: on ? kGoldDeep : cs.primary)),
-                    ],
-                  ),
-                ),
-              ),
-              _item(3, Icons.record_voice_over_outlined, Icons.record_voice_over_rounded, 'التسميع'),
-              _item(4, Icons.settings_outlined, Icons.settings_rounded, 'الإعدادات'),
-            ],
-          ),
+        child: NavPill(
+          selected: _i,
+          onTap: (i) => setState(() => _i = i),
+          onSearch: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchScreen())),
         ),
       ),
     );

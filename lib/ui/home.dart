@@ -52,8 +52,9 @@ class HomeScreen extends StatelessWidget {
                         ),
                       ),
                       IconButton.filledTonal(
-                        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchScreen())),
-                        icon: const Icon(Icons.search_rounded),
+                        tooltip: 'الإعدادات',
+                        onPressed: () => onTab(4),
+                        icon: const Icon(Icons.settings_outlined),
                       ),
                     ],
                   ),
