@@ -64,7 +64,7 @@ jobs:
         run: |
           export KEY_PATH=$HOME/.mushaf-key/release.jks
           export KEY_PASS=$(cat ~/.mushaf-key/pass)
-          python3 tool/patch_android.py > /dev/null
+          python3 tool/patch_android.py | grep "proguard wired"
           echo "patched"
 
       - run: flutter pub get

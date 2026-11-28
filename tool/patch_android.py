@@ -205,3 +205,30 @@ if '.PrayerWidget' not in m:
         m = re.sub(r'(</intent-filter>)', r'\1\n            <intent-filter><action android:name="es.antonborri.home_widget.action.LAUNCH"/></intent-filter>', m, count=1)
     man.write_text(m)
 print('android patched')
+
+# ---------------- rules for the code shrinker ----------------
+# Without these the shrinker removes classes that are only reached by name, and the app
+# stops the moment it opens (WorkManager's database), or when a reminder is saved.
+(app / 'proguard-rules.pro').write_text("""
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+-keep class androidx.work.impl.** { *; }
+-keep class androidx.work.** { *; }
+-keep class androidx.startup.** { *; }
+-keep class com.dexterous.** { *; }
+-keep class com.google.gson.** { *; }
+-keepattributes Signature
+-keepattributes *Annotation*
+-keep class * extends com.google.gson.reflect.TypeToken
+-keep class com.k2fsa.sherpa.onnx.** { *; }
+-dontwarn com.google.errorprone.annotations.**
+""")
+for f in (app / 'build.gradle.kts', app / 'build.gradle'):
+    if f.exists():
+        g = f.read_text()
+        if 'proguard-rules.pro' not in g:
+            if f.suffix == '.kts':
+                g = re.sub(r'(buildTypes\s*\{\s*release\s*\{)', r'\1\n            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")', g, count=1)
+            else:
+                g = re.sub(r'(buildTypes\s*\{\s*release\s*\{)', r"\1\n            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'", g, count=1)
+            f.write_text(g)
+        print('proguard wired:', 'proguard-rules.pro' in g)
