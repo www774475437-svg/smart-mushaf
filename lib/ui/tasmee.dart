@@ -71,6 +71,49 @@ bool nearWord(String heard, String expected) {
   return _levFull(heard, expected) <= lim;
 }
 
+/// The strong letters of a word, each with its short vowel (a, u, i) when one is written.
+List<List<int>> _vowels(String w) {
+  final out = <List<int>>[];
+  for (final r in w.runes) {
+    var v = 0;
+    if (r == 0x064E || r == 0x064B || r == 0x08F0) v = 1;
+    if (r == 0x064F || r == 0x064C || r == 0x08F1) v = 2;
+    if (r == 0x0650 || r == 0x064D || r == 0x08F2) v = 3;
+    if (v != 0) {
+      if (out.isNotEmpty && out.last[1] == 0) out.last[1] = v;
+      continue;
+    }
+    if (r < 0x0621 || r > 0x064A || r == 0x0640) {
+      // a mark that is not a short vowel; a letter outside the alphabet ends the pairing
+      if (r >= 0x0671 && r <= 0x06D3) out.add([0, -1]);
+      continue;
+    }
+    // the weak letters and the hamza are written differently in the mushaf: they are left out
+    const weak = [0x0621, 0x0622, 0x0623, 0x0624, 0x0625, 0x0626, 0x0627, 0x0648, 0x0649, 0x064A];
+    if (weak.contains(r)) {
+      out.add([0, -1]);
+      continue;
+    }
+    out.add([r == 0x0629 ? 0x0647 : r, 0]);
+  }
+  return out.where((e) => e[0] != 0).toList();
+}
+
+/// Was the word said with a short vowel other than the mushaf's? Only what is sure is counted:
+/// the same strong letters on both sides, and a written vowel on both that differs.
+bool tashkeelDiffers(String heard, String mushaf, {bool skipLast = false}) {
+  final h = _vowels(heard), m = _vowels(mushaf);
+  if (h.length != m.length || h.isEmpty) return false;
+  for (var i = 0; i < h.length; i++) {
+    if (h[i][0] != m[i][0]) return false;
+  }
+  final n = skipLast ? h.length - 1 : h.length;
+  for (var i = 0; i < n; i++) {
+    if (h[i][1] > 0 && m[i][1] > 0 && h[i][1] != m[i][1]) return true;
+  }
+  return false;
+}
+
 class _W {
   final String key; // line:index on the page
   final int g;
@@ -112,8 +155,11 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   int _rangeWrong = 0, _redSeen = 0;
 
   // recognition inside the phone, with no internet
-  bool _model = false; // the model is on the phone
+  final Set<String> _have = {}; // the models that are on the phone
+  bool get _model => _have.isNotEmpty;
+  String get _kind => _have.contains(AppSettings.I.tasModel) ? AppSettings.I.tasModel : (_have.isEmpty ? 'base' : _have.first);
   bool get _offline => _model && AppSettings.I.tasOffline;
+  String? _dlKind;
   String _done = ''; // what was written down for good in this listening session
   bool _quiet = false; // a guess made while the words are still being said
   Timer? _tick;
@@ -125,9 +171,11 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     super.initState();
     page = widget.page.clamp(1, 604);
     _build();
-    OfflineAsr.I.installed().then((v) {
-      if (mounted && v) setState(() => _model = true);
-    });
+    for (final k in const ['base', 'tiny']) {
+      OfflineAsr.I.installed(k).then((v) {
+        if (mounted && v) setState(() => _have.add(k));
+      });
+    }
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       final n = AppSettings.I.tasAutoHint;
       if (n <= 0 || !on || widget.follow || !mounted || idx >= words.length) return;
@@ -138,15 +186,19 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     });
   }
 
-  Future<void> _getModel() async {
+  Future<void> _getModel(String k) async {
     if (_dl != null) return;
-    setState(() => _dl = 0);
+    setState(() {
+      _dl = 0;
+      _dlKind = k;
+    });
     try {
-      await OfflineAsr.I.download((p) {
+      await OfflineAsr.I.download(k, (p) {
         if (mounted) setState(() => _dl = p);
       });
       if (mounted) {
-        setState(() => _model = true);
+        setState(() => _have.add(k));
+        AppSettings.I.tasModel = k;
         toast(context, 'صار التسميع يعمل بلا إنترنت');
       }
     } catch (_) {
@@ -297,12 +349,14 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
       heard = '';
       _done = '';
       if (OfflineAsr.I.running) return; // the microphone is already open: go on with the new page
+      await OfflineAsr.I.use(_kind);
       final e = await OfflineAsr.I.start((t, fin) {
         if (!mounted || !on) return;
         heard = '$_done $t'.trim();
         if (fin) _done = heard;
         _quiet = !fin;
-        _consume(normalizeAr(heard).split(' ').where((w) => w.isNotEmpty).toList());
+        final raw = heard.split(' ').where((w) => normalizeAr(w).isNotEmpty).toList();
+        _consume(raw.map(normalizeAr).toList(), raw);
         _quiet = false;
       });
       if (e != null && mounted) {
@@ -332,7 +386,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
 
   /// Follows the recitation. The whole transcript of this listening session is matched
   /// again on every result, so a word the engine corrects later is corrected here too.
-  void _consume(List<String> heardWords) {
+  void _consume(List<String> heardWords, [List<String>? raw]) {
     if (heardWords.length < _from) {
       // the engine started a new transcript
       _from = 0;
@@ -345,11 +399,17 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     final missed = <String>[]; // heard words that matched nothing since the last match
     bool m(int hj, int wi) => hj < hs.length && wi < words.length && sameWord(hs[hj], words[wi].norm);
     void ok(int wi) => st[words[wi].key] ??= 1;
+    final tk = raw != null && raw.length == hs.length && AppSettings.I.tasTashkeel && !widget.follow;
     var j = _from;
     while (j < hs.length && i < words.length) {
       final h = hs[j];
       final e = words[i].norm;
       if (sameWord(h, e)) {
+        // the words still being said may yet change: their vowels are judged once they settle
+        if (tk && h == normalizeAr(raw[j]) && (!_quiet || j < hs.length - 2) && st[words[i].key] == null &&
+            tashkeelDiffers(raw[j], words[i].text, skipLast: i + 1 >= words.length || words[i + 1].g != words[i].g)) {
+          st[words[i].key] = 4;
+        }
         ok(i);
         i++;
         j++;
@@ -458,7 +518,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     final by = <int, List<String>>{};
     for (final w in words) {
       final st = state[w.key];
-      if (st == 2 || st == 3) (by[w.g] ??= []).add(w.norm);
+      if (st == 2 || st == 3 || st == 4) (by[w.g] ??= []).add(w.norm);
     }
     by.forEach((g, l) => UserStore.I.addMistake(g, l));
   }
@@ -473,7 +533,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
       });
       return;
     }
-    final wrong = state.values.where((v) => v == 2 || v == 3).length;
+    final wrong = state.values.where((v) => v == 2 || v == 3 || v == 4).length;
     _saveMistakes();
     UserStore.I.setPageStatus(page, wrong == 0 ? 1 : (wrong <= 3 ? 2 : 3));
     UserStore.I.logTasmee(wrong);
@@ -505,15 +565,30 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
   Widget _dlRow(Color green) => _dl != null
       ? Column(
           children: [
-            Text('تحميل نموذج الصوت ${ar((_dl! * 100).round())}٪', style: TextStyle(fontSize: 12, color: green)),
+            Text('تحميل النموذج ${_dlKind == 'tiny' ? 'السريع' : 'الدقيق'} ${ar((_dl! * 100).round())}٪', style: TextStyle(fontSize: 12, color: green)),
             const SizedBox(height: 4),
             LinearProgressIndicator(value: _dl, minHeight: 4, color: green),
           ],
         )
-      : TextButton.icon(
-          onPressed: _getModel,
-          icon: Icon(Icons.download_for_offline_rounded, size: 18, color: green),
-          label: Text('حمّل نموذج الصوت للتسميع بلا إنترنت (١٦٠ ميجابايت)', style: TextStyle(color: green, fontSize: 12.5)),
+      : Column(
+          children: [
+            Text('حمّل نموذج الصوت للتسميع بلا إنترنت', style: TextStyle(fontSize: 12, color: green, fontWeight: FontWeight.w600)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton.icon(
+                  onPressed: () => _getModel('tiny'),
+                  icon: Icon(Icons.bolt_rounded, size: 18, color: green),
+                  label: Text('السريع (١٠٤ م.ب)', style: TextStyle(color: green, fontSize: 12.5)),
+                ),
+                TextButton.icon(
+                  onPressed: () => _getModel('base'),
+                  icon: Icon(Icons.verified_outlined, size: 18, color: green),
+                  label: Text('الدقيق (١٦٠ م.ب)', style: TextStyle(color: green, fontSize: 12.5)),
+                ),
+              ],
+            ),
+          ],
         );
 
   Future<void> _stopAll() async {
@@ -556,13 +631,30 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
                   if (!OfflineAsr.supported)
                     const Padding(padding: EdgeInsets.symmetric(horizontal: 18), child: Text('بالإنترنت (التسميع بلا إنترنت في تطبيق الأندرويد)', style: TextStyle(fontSize: 13)))
                   else if (!_model)
-                    const Padding(padding: EdgeInsets.symmetric(horizontal: 18), child: Text('بالإنترنت • حمّل نموذج الصوت من أسفل الصفحة ليعمل بلا إنترنت', style: TextStyle(fontSize: 13)))
+                    const Padding(padding: EdgeInsets.symmetric(horizontal: 18), child: Text('بالإنترنت • اختر نموذجًا من الأسفل ليعمل بلا إنترنت', style: TextStyle(fontSize: 13)))
                   else
                     chips(const ['بلا إنترنت (نموذج القرآن)', 'بالإنترنت'], a.tasOffline ? 0 : 1, (i) {
                       _stopAll();
                       a.tasOffline = i == 0;
                       setState(() {});
                     }),
+                  if (OfflineAsr.supported && a.tasOffline) ...[
+                    head('نموذج الصوت'),
+                    chips([
+                      _have.contains('tiny') ? 'السريع' : 'السريع (تحميل ١٠٤ م.ب)',
+                      _have.contains('base') ? 'الدقيق' : 'الدقيق (تحميل ١٦٠ م.ب)',
+                    ], _model ? (_kind == 'tiny' ? 0 : 1) : -1, (i) {
+                      final k = i == 0 ? 'tiny' : 'base';
+                      _stopAll();
+                      if (_have.contains(k)) {
+                        a.tasModel = k;
+                        setState(() {});
+                      } else {
+                        Navigator.pop(c);
+                        _getModel(k);
+                      }
+                    }),
+                  ],
                   head('دقة الحساب'),
                   chips(const ['متسامح', 'متوسط', 'دقيق'], a.tasStrict, (i) => a.tasStrict = i),
                   Padding(
@@ -576,6 +668,12 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
                   head('التذكير التلقائي عند التوقف'),
                   chips([for (final h in hints) h == 0 ? 'بدون' : '${ar(h)} ثوانٍ'], hints.indexOf(a.tasAutoHint).clamp(0, hints.length - 1), (i) => a.tasAutoHint = hints[i]),
                   const SizedBox(height: 6),
+                  SwitchListTile(
+                      dense: true,
+                      title: const Text('تدقيق التشكيل (تجريبي)'),
+                      subtitle: const Text('الكلمة التي نُطقت بحركة مخالفة تظهر بالأزرق • بلا إنترنت فقط', style: TextStyle(fontSize: 11.5)),
+                      value: a.tasTashkeel,
+                      onChanged: (v) => set(() => a.tasTashkeel = v)),
                   SwitchListTile(dense: true, title: const Text('الاهتزاز عند الخطأ'), value: a.tasVibrate, onChanged: (v) => set(() => a.tasVibrate = v)),
                   SwitchListTile(dense: true, title: const Text('الانتقال للصفحة التالية تلقائيًا'), value: a.tasAutoNext, onChanged: (v) => set(() => a.tasAutoNext = v)),
                   SwitchListTile(dense: true, title: const Text('إظهار ما يسمعه التطبيق'), value: a.tasShowHeard, onChanged: (v) {
@@ -583,16 +681,16 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
                     setState(() {});
                   }),
                   SwitchListTile(dense: true, title: const Text('إبقاء الشاشة مضاءة'), value: a.keepAwake, onChanged: (v) => set(() => a.keepAwake = v)),
-                  if (_model)
+                  for (final k in _have.toList())
                     ListTile(
                       dense: true,
                       leading: const Icon(Icons.delete_outline_rounded),
-                      title: const Text('حذف نموذج الصوت من الجوال (١٦٠ ميجابايت)'),
+                      title: Text('حذف النموذج ${k == 'tiny' ? 'السريع' : 'الدقيق'} من الجوال'),
                       onTap: () async {
                         Navigator.pop(c);
                         await _stopAll();
-                        await OfflineAsr.I.remove();
-                        if (mounted) setState(() => _model = false);
+                        await OfflineAsr.I.remove(k);
+                        if (mounted) setState(() => _have.remove(k));
                       },
                     ),
                   const SizedBox(height: 8),
@@ -626,6 +724,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
     final green = AppSettings.I.theme == ReadTheme.night ? const Color(0xFF7BCBB0) : kEmerald;
     final okN = state.values.where((v) => v == 1).length;
     final badN = state.values.where((v) => v == 2 || v == 3).length;
+    final tkN = state.values.where((v) => v == 4).length;
     if (!MushafLayout.I.ready) {
       return Scaffold(appBar: AppBar(title: const Text('التسميع')), body: const Center(child: Text('صفحات المصحف غير متوفرة')));
     }
@@ -636,7 +735,7 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
         title: Column(
           children: [
             Text(widget.follow ? 'القراءة بالمتابعة • صفحة ${ar(page)}' : widget.rangeName != null ? 'تسميع ${widget.rangeName} • صفحة ${ar(page)}' : 'تسميع صفحة ${ar(page)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-            Text(widget.follow ? 'سورة ${surahName(q.surahOfPage(page))} • قرأت ${ar(okN + badN)} كلمة' : 'سورة ${surahName(q.surahOfPage(page))} • صحيح ${ar(okN)} • خطأ ${ar(badN)}',
+            Text(widget.follow ? 'سورة ${surahName(q.surahOfPage(page))} • قرأت ${ar(okN + badN)} كلمة' : 'سورة ${surahName(q.surahOfPage(page))} • صحيح ${ar(okN)} • خطأ ${ar(badN)}${tkN > 0 ? ' • تشكيل ${ar(tkN)}' : ''}',
                 style: const TextStyle(fontSize: 11.5, color: kGoldDeep)),
           ],
         ),
@@ -736,24 +835,13 @@ class _TasmeeScreenState extends State<TasmeeScreen> {
                         children: [
                           Icon(Icons.offline_bolt_rounded, size: 16, color: green),
                           const SizedBox(width: 6),
-                          Text(b ? 'يكتب ما قرأت…' : 'التسميع بلا إنترنت • تظهر الكلمات وأنت تقرأ',
+                          Text(b ? 'يكتب ما قرأت…' : 'بلا إنترنت • النموذج ${_kind == 'tiny' ? 'السريع' : 'الدقيق'} • تظهر الكلمات وأنت تقرأ',
                               style: TextStyle(fontSize: 12, color: green, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
             ),
-          Container(
-            color: col.soft,
-            width: double.infinity,
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Center(
-              child: TextButton.icon(
-                onPressed: () => showSoon(context, title: 'تدقيق التشكيل بالذكاء الاصطناعي'),
-                icon: const Icon(Icons.lightbulb_rounded, size: 18, color: kGoldDeep),
-                label: const Text('تدقيق التشكيل بالذكاء الاصطناعي (اشتراك)', style: TextStyle(color: kGoldDeep, fontSize: 12.5)),
-              ),
-            ),
-          ),
+          Container(color: col.soft, width: double.infinity, height: 6),
         ],
       ),
     );

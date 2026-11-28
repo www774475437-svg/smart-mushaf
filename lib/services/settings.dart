@@ -27,6 +27,13 @@ class AppSettings extends ChangeNotifier {
   bool get tasOffline => _p.getBool('tasOffline') ?? true;
   set tasOffline(bool v) => _set('tasOffline', v);
 
+  /// 'base' hears best, 'tiny' is faster
+  String get tasModel => _p.getString('tasModel') ?? 'base';
+  set tasModel(String v) => _set('tasModel', v);
+
+  bool get tasTashkeel => _p.getBool('tasTashkeel') ?? true;
+  set tasTashkeel(bool v) => _set('tasTashkeel', v);
+
   bool get tasVibrate => _p.getBool('tasVibrate') ?? true;
   set tasVibrate(bool v) => _set('tasVibrate', v);
 

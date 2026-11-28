@@ -172,6 +172,10 @@ class _MushafLinesPageState extends State<MushafLinesPage> {
               } else if (stt == 2) {
                 fgs[k] = Colors.red.shade700;
                 bgs[k] = Colors.red.withValues(alpha: 0.14);
+              } else if (stt == 4) {
+                // read, but with a wrong vowel
+                fgs[k] = const Color(0xFF1565C0);
+                bgs[k] = const Color(0xFF1E88E5).withValues(alpha: 0.16);
               } else if (stt == 3) {
                 fgs[k] = const Color(0xFFB07A00);
                 bgs[k] = const Color(0xFFFFD970).withValues(alpha: 0.35);
